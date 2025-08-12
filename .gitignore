@@ -1,19 +1,19 @@
-# Python cache
+# Python
+venv/
 __pycache__/
 *.pyc
 
-# Virtualenv
-env/
-venv/
-.venv/
+# Node
+node_modules/
+dist/
+build/
 
-# IDE
-.vscode/
-
-# Environment files
+# Environment & Secrets
 .env
-*.env
-
-# Database
-*.db
+instance/
 *.sqlite3
+
+# IDE/OS
+.vscode/
+.idea/
+.DS_Store

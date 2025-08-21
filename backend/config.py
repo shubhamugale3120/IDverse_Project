@@ -3,7 +3,15 @@
 import os
 
 class Config:
-    SECRET_KEY = os.getenv("SECRET_KEY", "dev-secret-change-me")
-    JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "dev-jwt-secret-change-me")
-    SQLALCHEMY_DATABASE_URI = os.getenv("SQLALCHEMY_DATABASE_URI", "sqlite:///idverse.db")
+    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
+    SECRET_KEY = os.getenv("SECRET_KEY", "super-secret-key")
+
+
+
+# theory
+# 2. backend/config.py
+# Role: Stores all configuration values for your app.
+# Uses .env file for secrets. 
+# Why: Keeps passwords, DB strings, API keys out of code.
+# ✅ Frontend doesn’t touch this (backend-only).

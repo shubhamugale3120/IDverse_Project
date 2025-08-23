@@ -1,10 +1,15 @@
 from flask import Flask, jsonify
-from dotenv import load_dotenv
 from flask_cors import CORS
+from flask_migrate import Migrate       # <-- add this import
+from dotenv import load_dotenv
+
+load_dotenv()
+
 from backend.extensions import db, jwt
 from backend.config import Config
 from backend.auth.routes import auth_bp
 from backend.scheme_engine import scheme_bp 
+
 
 def create_app():
     load_dotenv()
@@ -14,6 +19,7 @@ def create_app():
 
     db.init_app(app)
     jwt.init_app(app)
+    Migrate(app, db) 
 
     # register blueprints (once each!)
     app.register_blueprint(auth_bp)

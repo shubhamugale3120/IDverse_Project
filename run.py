@@ -1,22 +1,33 @@
-# Theory
-# Role: Entry point. Runs the Flask app.
-# Frontend doesn’t touch this.9. 
-# 
-# # .env
-# Role: Stores secrets like database URI, JWT secret.
+#!/usr/bin/env python3
+"""
+IDVerse Flask Application Entry Point
+Run this file to start the Flask development server
+"""
 
-# FLASK_ENV=development
-# SECRET_KEY=super-secret-key
-# JWT_SECRET_KEY=super-jwt-secret
-# SQLALCHEMY_DATABASE_URI=sqlite:///idverse.db
-# ✅ Frontend doesn’t touch this.
+import sys
+import os
 
-# whole work
-# Backend ↔ Frontend Integration Points
-# Backend File / API	            What it does	     Which frontend page uses it
-# /auth/register (auth/routes.py)-->	Register new user	  -->        Registration Page
-# /auth/login (auth/routes.py)-->	Login + JWT token	   -->          Login Page
-# /schemes (scheme_engine/engine.py)-->	Suggest welfare schemes	  -->    Dashboard
-# /user/<uid> (model.py + blockchain.py)-->	Fetch user profile + digital ID	-->Profile Page
-# /wallet (future)-->	Show benefits wallet	-->Wallet Page
-# /health	Debug only	None (backend check)-->
+# Add the project root to Python path so 'backend' module can be imported
+project_root = os.path.dirname(os.path.abspath(__file__))
+sys.path.insert(0, project_root)
+
+from backend import create_app
+
+if __name__ == "__main__":
+    app = create_app()
+    
+    # Print all available routes for debugging
+    print("\n" + "="*50)
+    print("🚀 IDVerse Flask App Starting...")
+    print("="*50)
+    print("Available Routes:")
+    for rule in app.url_map.iter_rules():
+        print(f"  {rule.methods} {rule.rule}")
+    print("="*50)
+    print("🌐 Server will be available at: http://localhost:5000")
+    print("🔍 Health check: http://localhost:5000/health")
+    print("📚 API docs: http://localhost:5000/_debug/routes")
+    print("="*50 + "\n")
+    
+    # Start the Flask development server
+    app.run(debug=True, host='127.0.0.1', port=5000)

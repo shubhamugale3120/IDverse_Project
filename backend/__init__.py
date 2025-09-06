@@ -9,6 +9,9 @@ from backend.extensions import db, jwt
 from backend.config import Config
 from backend.auth.routes import auth_bp
 from backend.scheme_engine import scheme_bp 
+from backend.routes.otp import otp_bp
+from backend.routes.vc import vc_bp
+from backend.routes.benefits import benefits_bp
 
 
 def create_app():
@@ -24,6 +27,9 @@ def create_app():
     # register blueprints (once each!)
     app.register_blueprint(auth_bp)
     app.register_blueprint(scheme_bp)
+    app.register_blueprint(otp_bp)
+    app.register_blueprint(vc_bp)
+    app.register_blueprint(benefits_bp)
 
     @app.get("/health")
     def health():

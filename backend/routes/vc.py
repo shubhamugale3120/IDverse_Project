@@ -11,6 +11,7 @@ from backend.services.registry_service import get_registry_service  # Registry s
 
 # Import utilities
 import uuid  # For generating unique IDs
+import os  # For environment variables
 from datetime import datetime, timedelta  # For timestamps and expiration
 
 # backend/routes/vc.py

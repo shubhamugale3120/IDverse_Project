@@ -35,13 +35,13 @@ def apply_benefit():
     
     # Get application data from request
     payload = request.get_json(silent=True) or {}
-    scheme_name = (payload.get("scheme") or "").strip()
-    application_data = payload.get("application_data", {})
+    scheme_name = (payload.get("scheme") or payload.get("benefit_type") or "").strip()
+    application_data = payload.get("application_data", payload.get("personal_info", {}))
     supporting_documents = payload.get("supporting_documents", [])
     
     # Input validation
     if not scheme_name:
-        return jsonify({"error": "scheme is required"}), 400
+        return jsonify({"error": "scheme or benefit_type is required"}), 400
     
     try:
         # Generate unique application ID
@@ -204,5 +204,49 @@ def wallet_view():
         
     except Exception as e:
         return jsonify({"error": f"Failed to retrieve wallet: {str(e)}"}), 500
+
+
+@benefits_bp.get("/applications")
+@jwt_required()
+def get_applications():
+    """
+    Get User Applications Endpoint
+    Purpose: Retrieve user's benefit applications
+    Method: GET
+    URL: /benefits/applications
+    Auth Required: Yes (JWT Token)
+    """
+    # Get user identity from JWT token
+    user_email = get_jwt_identity()
+    user = User.query.filter_by(email=user_email).first()
+    if not user:
+        return jsonify({"error": "User not found"}), 404
+    
+    try:
+        # Get all applications for user
+        applications = BenefitApplication.query.filter_by(applicant_id=user.id).all()
+        
+        # Format response
+        app_list = []
+        for app in applications:
+            app_list.append({
+                "id": app.id,
+                "application_id": app.application_id,
+                "scheme_name": app.scheme_name,
+                "status": app.status.value,
+                "applied_at": app.applied_at.isoformat() if app.applied_at else None,
+                "approved_at": app.approved_at.isoformat() if app.approved_at else None,
+                "application_data": app.application_data,
+                "supporting_documents": app.supporting_documents
+            })
+        
+        return jsonify({
+            "applicant": user_email,
+            "total_applications": len(app_list),
+            "applications": app_list
+        }), 200
+        
+    except Exception as e:
+        return jsonify({"error": f"Failed to retrieve applications: {str(e)}"}), 500
 
 

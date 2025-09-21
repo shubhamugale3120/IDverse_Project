@@ -1,236 +1,151 @@
 #!/usr/bin/env python3
 """
-Quick IDVerse API Test Script
-Tests all endpoints with proper error handling
+Quick test script to verify JWT token and system components
+This script tests the system without requiring a running server
 """
 
-import requests
-import json
 import sys
-from datetime import datetime
+import os
+from pathlib import Path
 
-# Configuration
-BASE_URL = "http://localhost:5000"
-jwt_token = None
+# Add project root to Python path
+project_root = Path(__file__).parent.absolute()
+sys.path.insert(0, str(project_root))
 
-def make_request(method, endpoint, data=None, headers=None):
-    """Make HTTP request with error handling"""
-    url = f"{BASE_URL}{endpoint}"
+def test_imports():
+    """Test if all modules can be imported"""
+    print("🔍 Testing imports...")
+    
     try:
-        if method.upper() == "GET":
-            response = requests.get(url, headers=headers)
-        elif method.upper() == "POST":
-            response = requests.post(url, json=data, headers=headers)
-        else:
-            print(f"❌ Unsupported method: {method}")
-            return None
-            
-        if response.status_code < 400:
-            return response.json()
-        else:
-            print(f"❌ {method} {endpoint}: {response.status_code} - {response.text}")
-            return None
+        from backend import create_app
+        print("✅ Backend import successful")
     except Exception as e:
-        print(f"❌ Error calling {method} {endpoint}: {e}")
-        return None
+        print(f"❌ Backend import failed: {e}")
+        return False
+    
+    try:
+        from backend.model import User, VCRequest, VerifiableCredential
+        print("✅ Models import successful")
+    except Exception as e:
+        print(f"❌ Models import failed: {e}")
+        return False
+    
+    try:
+        from backend.services.ipfs_service import get_ipfs_service
+        from backend.services.signing_service import get_signing_service
+        from backend.services.registry_service import get_registry_service
+        print("✅ Services import successful")
+    except Exception as e:
+        print(f"❌ Services import failed: {e}")
+        return False
+    
+    return True
 
-def test_health():
-    """Test health endpoint"""
-    print("1. Testing Health Check...")
-    result = make_request("GET", "/health")
-    if result and result.get("status") == "ok":
-        print("✅ Health Check: OK")
-        return True
-    else:
-        print("❌ Health Check: Failed")
+def test_jwt_token():
+    """Test JWT token validity"""
+    print("\n🔍 Testing JWT token...")
+    
+    # Your JWT token
+    jwt_token = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc1ODM1OTc3OSwianRpIjoiZTI5ZDAzNjItMTRiMC00YWZhLWFjZGQtMGMzMjUxYzk2ODIzIiwidHlwZSI6ImFjY2VzcyIsInN1YiI6InRlc3RAZXhhbXBsZS5jb20iLCJuYmYiOjE3NTgzNTk3NzksImNzcmYiOiIyNWE2Mjc3ZS0xM2MyLTRjNjAtYTk3ZS1mOGQyOGEwMWIwZDEiLCJleHAiOjE3NTgzNjA2Nzl9.ah3Z8525QSMwzlJ7M3Rxi8qmYdvzjbW1f7-lBTeJLW4"
+    
+    try:
+        import jwt
+        from datetime import datetime
+        
+        # Decode without verification to check structure
+        decoded = jwt.decode(jwt_token, options={"verify_signature": False})
+        
+        print(f"✅ JWT token structure valid")
+        print(f"   Subject: {decoded.get('sub', 'N/A')}")
+        print(f"   Issued at: {datetime.fromtimestamp(decoded.get('iat', 0))}")
+        print(f"   Expires at: {datetime.fromtimestamp(decoded.get('exp', 0))}")
+        
+        # Check if expired
+        exp_time = decoded.get('exp', 0)
+        current_time = datetime.now().timestamp()
+        
+        if exp_time < current_time:
+            print(f"⚠️  JWT token is EXPIRED!")
+            print(f"   Expired: {datetime.fromtimestamp(exp_time)}")
+            print(f"   Current: {datetime.fromtimestamp(current_time)}")
+            return False
+        else:
+            print(f"✅ JWT token is VALID (not expired)")
+            return True
+            
+    except Exception as e:
+        print(f"❌ JWT token test failed: {e}")
         return False
 
-def test_registration():
-    """Test user registration"""
-    print("\n2. Testing User Registration...")
-    timestamp = datetime.now().strftime("%Y%m%d%H%M%S")
-    data = {
-        "username": f"testuser_{timestamp}",
-        "email": f"test_{timestamp}@example.com",
-        "password": "password123"
-    }
+def test_app_creation():
+    """Test if the Flask app can be created"""
+    print("\n🔍 Testing Flask app creation...")
     
-    result = make_request("POST", "/auth/register", data)
-    if result and "message" in result:
-        print(f"✅ Registration: {result['message']}")
-        return data["email"]  # Return email for login
-    else:
-        print("❌ Registration: Failed")
-        return None
-
-def test_login(email):
-    """Test user login"""
-    print("\n3. Testing User Login...")
-    data = {
-        "email": email,
-        "password": "password123"
-    }
-    
-    result = make_request("POST", "/auth/login", data)
-    if result and "access_token" in result:
-        global jwt_token
-        jwt_token = result["access_token"]
-        print(f"✅ Login: JWT token received")
-        print(f"   User: {result['user']['username']}")
+    try:
+        # Set environment variables
+        os.environ['DATABASE_URL'] = 'sqlite:///:memory:'
+        os.environ['FLASK_ENV'] = 'development'
+        os.environ['FLASK_DEBUG'] = 'True'
+        
+        from backend import create_app
+        app = create_app()
+        
+        print("✅ Flask app created successfully")
+        print(f"   App name: {app.name}")
+        print(f"   Debug mode: {app.debug}")
+        
+        # Test routes
+        with app.app_context():
+            routes = []
+            for rule in app.url_map.iter_rules():
+                routes.append(f"{rule.methods} {rule.rule}")
+            
+            print(f"   Available routes: {len(routes)}")
+            for route in routes[:5]:  # Show first 5 routes
+                print(f"     {route}")
+            if len(routes) > 5:
+                print(f"     ... and {len(routes) - 5} more")
+        
         return True
-    else:
-        print("❌ Login: Failed")
-        return False
-
-def test_vc_request():
-    """Test VC request issue"""
-    print("\n4. Testing VC Request Issue...")
-    headers = {"Authorization": f"Bearer {jwt_token}"}
-    data = {
-        "type": "GovID",
-        "claims": {
-            "name": "Shubham Ugale",
-            "age": 25,
-            "address": "Mumbai, India"
-        }
-    }
-    
-    result = make_request("POST", "/vc/request-issue", data, headers)
-    if result and "request_id" in result:
-        print(f"✅ VC Request: {result['request_id']}")
-        return result["request_id"]
-    else:
-        print("❌ VC Request: Failed")
-        return None
-
-def test_vc_issue(request_id):
-    """Test VC issue"""
-    print("\n5. Testing VC Issue...")
-    headers = {"Authorization": f"Bearer {jwt_token}"}
-    data = {"request_id": request_id}
-    
-    result = make_request("POST", "/vc/issue", data, headers)
-    if result and "vc_id" in result:
-        print(f"✅ VC Issue: {result['vc_id']}")
-        print(f"   CID: {result.get('cid', 'N/A')}")
-        return result["vc_id"]
-    else:
-        print("❌ VC Issue: Failed")
-        return None
-
-def test_vc_status(vc_id):
-    """Test VC status check"""
-    print("\n6. Testing VC Status...")
-    headers = {"Authorization": f"Bearer {jwt_token}"}
-    
-    result = make_request("GET", f"/vc/status/{vc_id}", headers=headers)
-    if result and "status" in result:
-        print(f"✅ VC Status: {result['status']}")
-        print(f"   Verifiable: {result.get('verifiable', 'N/A')}")
-        return True
-    else:
-        print("❌ VC Status: Failed")
-        return False
-
-def test_benefits_apply():
-    """Test benefits application"""
-    print("\n7. Testing Benefits Apply...")
-    headers = {"Authorization": f"Bearer {jwt_token}"}
-    data = {
-        "scheme_id": "scheme-001",
-        "scheme_name": "PM Kisan Yojana",
-        "required_credentials": ["GovID"],
-        "application_data": {
-            "land_holding": "2 acres",
-            "bank_account": "1234567890"
-        }
-    }
-    
-    result = make_request("POST", "/benefits/apply", data, headers)
-    if result and "application_id" in result:
-        print(f"✅ Benefits Apply: {result['application_id']}")
-        return result["application_id"]
-    else:
-        print("❌ Benefits Apply: Failed")
-        return None
-
-def test_benefits_wallet():
-    """Test benefits wallet"""
-    print("\n8. Testing Benefits Wallet...")
-    headers = {"Authorization": f"Bearer {jwt_token}"}
-    
-    result = make_request("GET", "/benefits/wallet", headers=headers)
-    if result and "wallet_items" in result:
-        print(f"✅ Benefits Wallet: {result['total_entitlements']} items")
-        return True
-    else:
-        print("❌ Benefits Wallet: Failed")
-        return False
-
-def test_schemes():
-    """Test schemes list"""
-    print("\n9. Testing Schemes List...")
-    headers = {"Authorization": f"Bearer {jwt_token}"}
-    
-    result = make_request("GET", "/schemes/", headers=headers)
-    if result and "schemes" in result:
-        print(f"✅ Schemes: {result['total']} available")
-        return True
-    else:
-        print("❌ Schemes: Failed")
-        return False
-
-def test_error_handling():
-    """Test error handling"""
-    print("\n10. Testing Error Handling...")
-    headers = {"Authorization": "Bearer invalid_token"}
-    
-    result = make_request("GET", "/benefits/wallet", headers=headers)
-    if result is None:  # Should fail with invalid token
-        print("✅ Error Handling: Correctly rejected invalid JWT")
-        return True
-    else:
-        print("❌ Error Handling: Should have rejected invalid JWT")
+        
+    except Exception as e:
+        print(f"❌ Flask app creation failed: {e}")
         return False
 
 def main():
     """Run all tests"""
-    print("🧪 IDVerse Complete System Testing")
-    print("=================================")
+    print("🚀 IDVerse Quick System Test")
+    print("=" * 50)
     
-    # Test basic connectivity
-    if not test_health():
-        print("\n❌ Server not responding. Make sure Flask app is running on localhost:5000")
-        sys.exit(1)
+    # Test 1: Imports
+    imports_ok = test_imports()
     
-    # Test user flow
-    email = test_registration()
-    if not email:
-        print("\n❌ Registration failed. Check database connection.")
-        sys.exit(1)
+    # Test 2: JWT Token
+    jwt_ok = test_jwt_token()
     
-    if not test_login(email):
-        print("\n❌ Login failed. Check authentication.")
-        sys.exit(1)
+    # Test 3: App Creation
+    app_ok = test_app_creation()
     
-    # Test VC flow
-    request_id = test_vc_request()
-    if request_id:
-        vc_id = test_vc_issue(request_id)
-        if vc_id:
-            test_vc_status(vc_id)
+    # Summary
+    print("\n" + "=" * 50)
+    print("📊 TEST SUMMARY:")
+    print(f"   Imports: {'✅ PASS' if imports_ok else '❌ FAIL'}")
+    print(f"   JWT Token: {'✅ PASS' if jwt_ok else '❌ FAIL'}")
+    print(f"   App Creation: {'✅ PASS' if app_ok else '❌ FAIL'}")
     
-    # Test benefits flow
-    test_benefits_apply()
-    test_benefits_wallet()
-    
-    # Test other endpoints
-    test_schemes()
-    test_error_handling()
-    
-    print("\n🎉 Testing Complete!")
-    print("===================")
-    print("Check results above for any failures.")
+    if all([imports_ok, jwt_ok, app_ok]):
+        print("\n🎉 All tests passed! System is ready.")
+        print("💡 Next step: Start the server with: python run.py")
+    else:
+        print("\n⚠️  Some tests failed. Check the errors above.")
+        
+        if not jwt_ok:
+            print("🔑 JWT Token Issue: Your token may be expired.")
+            print("   Solution: Get a fresh token by logging in again.")
+        
+        if not app_ok:
+            print("🔧 App Creation Issue: Check database configuration.")
+            print("   Solution: Verify .env file and database permissions.")
 
 if __name__ == "__main__":
     main()

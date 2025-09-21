@@ -1,198 +1,170 @@
 #!/usr/bin/env python3
 """
-IDVerse API Test Script with Your JWT Token
-Uses the JWT token you provided to test all endpoints
+Test IDVerse API with your JWT token
+This script tests all endpoints using your provided JWT token
 """
 
 import requests
+import os
 import json
+import sys
 from datetime import datetime
 
-# Configuration
-BASE_URL = "http://localhost:5000"
+# Your JWT token from yesterday
+JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc1ODQ0MTk3NiwianRpIjoiZTg2YjVmN2YtYTNmMy00NDAzLTk2ZjAtZWEyYTlhMzg5NDVkIiwidHlwZSI6ImFjY2VzcyIsInN1YiI6InNodWJoYW0udWdhbGVAZXhhbXBsZS5jb20iLCJuYmYiOjE3NTg0NDE5NzYsImNzcmYiOiI1M2YxMzU1Ni0xYmJhLTQ4YTYtYmJhYi0yYTkwMzJjNmQ1NDkiLCJleHAiOjE3NTg0NDI4NzZ9.woBddKQRwF1ef0OgdL8N1eiMDM9A9sdG6fVJx9E-uas"
 
-# Your JWT Token (paste it here)
-JWT_TOKEN = "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJmcmVzaCI6ZmFsc2UsImlhdCI6MTc1ODM1OTc3OSwianRpIjoiZTI5ZDAzNjItMTRiMC00YWZhLWFjZGQtMGMzMjUxYzk2ODIzIiwidHlwZSI6ImFjY2VzcyIsInN1YiI6InRlc3RAZXhhbXBsZS5jb20iLCJuYmYiOjE3NTgzNTk3NzksImNzcmYiOiIyNWE2Mjc3ZS0xM2MyLTRjNjAtYTk3ZS1mOGQyOGEwMWIwZDEiLCJleHAiOjE3NTgzNjA2Nzl9.ah3Z8525QSMwzlJ7M3Rxi8qmYdvzjbW1f7-lBTeJLW4"
+# Base URL for the API
+BASE_URL = "http://127.0.0.1:5000"
 
-def make_request(method, endpoint, data=None, use_auth=True):
-    """Make HTTP request with your JWT token"""
+# Headers with JWT token for protected endpoints
+AUTH_HEADERS = {
+    "Authorization": f"Bearer {JWT_TOKEN}",
+    "Content-Type": "application/json"
+}
+
+def print_section(title):
+    """Print a formatted section header"""
+    print(f"\n{'='*60}")
+    print(f"  {title}")
+    print(f"{'='*60}")
+
+def test_endpoint(method, endpoint, data=None, headers=None, description=""):
+    """Test a single API endpoint"""
     url = f"{BASE_URL}{endpoint}"
-    headers = {"Content-Type": "application/json"}
     
-    if use_auth:
-        headers["Authorization"] = f"Bearer {JWT_TOKEN}"
+    print(f"\n🔍 Testing: {method} {endpoint}")
+    if description:
+        print(f"   Description: {description}")
     
     try:
         if method.upper() == "GET":
-            response = requests.get(url, headers=headers)
+            response = requests.get(url, headers=headers or {})
         elif method.upper() == "POST":
-            response = requests.post(url, json=data, headers=headers)
+            response = requests.post(url, json=data, headers=headers or {})
+        elif method.upper() == "PUT":
+            response = requests.put(url, json=data, headers=headers or {})
         else:
-            print(f"❌ Unsupported method: {method}")
-            return None
+            print(f"   ❌ Unsupported method: {method}")
+            return False
             
-        print(f"📡 {method} {endpoint} -> {response.status_code}")
+        print(f"   Status: {response.status_code}")
         
         if response.status_code < 400:
+            print(f"   ✅ Success!")
             try:
-                return response.json()
+                result = response.json()
+                print(f"   Response: {json.dumps(result, indent=2)}")
             except:
-                return {"message": "Success", "status_code": response.status_code}
+                print(f"   Response: {response.text}")
         else:
-            print(f"   Error: {response.text}")
-            return None
+            print(f"   ❌ Error!")
+            try:
+                error = response.json()
+                print(f"   Error: {json.dumps(error, indent=2)}")
+            except:
+                print(f"   Error: {response.text}")
+                
+        return response.status_code < 400
+        
+    except requests.exceptions.ConnectionError:
+        print(f"   ❌ Connection Error: Make sure the server is running on {BASE_URL}")
+        return False
     except Exception as e:
-        print(f"❌ Error calling {method} {endpoint}: {e}")
-        return None
+        print(f"   ❌ Exception: {str(e)}")
+        return False
 
-def test_all_endpoints():
-    """Test all IDVerse endpoints with your JWT token"""
-    print("🧪 IDVerse API Testing with Your JWT Token")
-    print("=" * 50)
+def main():
+    """Run all API tests"""
+    print("🚀 IDVerse API Testing with Your JWT Token")
+    print(f"📅 Test started at: {datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
     print(f"🔑 Using JWT Token: {JWT_TOKEN[:50]}...")
-    print("=" * 50)
     
-    # Test 1: Health Check (no auth needed)
-    print("\n1. Health Check")
-    result = make_request("GET", "/health", use_auth=False)
-    if result:
-        print(f"✅ {result}")
-    else:
-        print("❌ Health check failed")
-        return
+    # Test 1: Health Check (No Auth Required)
+    print_section("HEALTH CHECK")
+    test_endpoint("GET", "/", description="Basic health check")
     
-    # Test 2: VC Request Issue
-    print("\n2. VC Request Issue")
-    vc_data = {
+    # Test 2: Authentication Endpoints (No Auth Required)
+    print_section("AUTHENTICATION ENDPOINTS")
+    test_endpoint("POST", "/auth/register", {
+        "name": "Test User",
+        "email": "test@example.com",
+        "password": "testpassword123"
+    }, description="User registration")
+    
+    test_endpoint("POST", "/auth/login", {
+        "email": "test@example.com", 
+        "password": "testpassword123"
+    }, description="User login")
+    
+    # Test 3: OTP Endpoints (No Auth Required)
+    print_section("OTP ENDPOINTS")
+    test_endpoint("POST", "/otp/request", {
+        "phone": "+919876543210"
+    }, description="Request OTP")
+    
+    test_endpoint("POST", "/otp/verify", {
+        "phone": "+919876543210",
+        "otp": "123456"
+    }, description="Verify OTP")
+    
+    # Test 4: VC Endpoints (Auth Required)
+    print_section("VERIFIABLE CREDENTIAL ENDPOINTS")
+    test_endpoint("POST", "/vc/request-issue", {
         "type": "GovID",
         "claims": {
             "name": "Shubham Ugale",
             "age": 25,
-            "address": "Mumbai, India",
-            "aadhaar": "123456789012"
+            "address": "Mumbai, India"
+        },
+        "subject_id": "shubham.ugale@example.com"
+    }, AUTH_HEADERS, description="Request VC issuance")
+    
+    test_endpoint("POST", "/vc/issue", {
+        "type": "GovID",
+        "subject_id": "shubham.ugale@example.com",
+        "claims": {
+            "name": "Shubham Ugale",
+            "age": 25,
+            "address": "Mumbai, India"
         }
-    }
-    result = make_request("POST", "/vc/request-issue", vc_data)
-    if result:
-        print(f"✅ Request ID: {result.get('request_id', 'N/A')}")
-        request_id = result.get('request_id')
-    else:
-        print("❌ VC request failed")
-        request_id = None
+    }, AUTH_HEADERS, description="Issue VC")
     
-    # Test 3: VC Issue
-    if request_id:
-        print("\n3. VC Issue")
-        issue_data = {"request_id": request_id}
-        result = make_request("POST", "/vc/issue", issue_data)
-        if result:
-            print(f"✅ VC ID: {result.get('vc_id', 'N/A')}")
-            print(f"   CID: {result.get('cid', 'N/A')}")
-            vc_id = result.get('vc_id')
-        else:
-            print("❌ VC issue failed")
-            vc_id = None
-    else:
-        vc_id = None
+    test_endpoint("POST", "/vc/present", {
+        "vc_id": "vc-GovID-12345678",
+        "challenge": "test-challenge-123"
+    }, AUTH_HEADERS, description="Present VC")
     
-    # Test 4: VC Status
-    if vc_id:
-        print("\n4. VC Status Check")
-        result = make_request("GET", f"/vc/status/{vc_id}")
-        if result:
-            print(f"✅ Status: {result.get('status', 'N/A')}")
-            print(f"   Verifiable: {result.get('verifiable', 'N/A')}")
-        else:
-            print("❌ VC status check failed")
+    test_endpoint("GET", "/vc/status/vc-GovID-12345678", headers=AUTH_HEADERS, description="Check VC status")
     
-    # Test 5: VC Present
-    if vc_id:
-        print("\n5. VC Present (Verification)")
-        present_data = {
-            "vc_id": vc_id,
-            "verifier_did": "did:example:verifier"
+    # Test 5: Benefits Endpoints (Auth Required)
+    print_section("BENEFITS ENDPOINTS")
+    test_endpoint("POST", "/benefits/apply", {
+        "benefit_type": "RationCard",
+        "personal_info": {
+            "name": "Shubham Ugale",
+            "age": 25,
+            "income": 50000
         }
-        result = make_request("POST", "/vc/present", present_data)
-        if result:
-            print(f"✅ Verified: {result.get('verified', 'N/A')}")
-        else:
-            print("❌ VC present failed")
+    }, AUTH_HEADERS, description="Apply for benefit")
     
-    # Test 6: Benefits Apply
-    print("\n6. Benefits Apply")
-    benefit_data = {
-        "scheme_id": "scheme-001",
-        "scheme_name": "PM Kisan Yojana",
-        "required_credentials": ["GovID"],
-        "application_data": {
-            "land_holding": "2 acres",
-            "bank_account": "1234567890",
-            "farmer_id": "FARM123456"
-        }
-    }
-    result = make_request("POST", "/benefits/apply", benefit_data)
-    if result:
-        print(f"✅ Application ID: {result.get('application_id', 'N/A')}")
-        app_id = result.get('application_id')
-    else:
-        print("❌ Benefits apply failed")
-        app_id = None
+    test_endpoint("GET", "/benefits/applications", headers=AUTH_HEADERS, description="Get user applications")
     
-    # Test 7: Benefits Approve
-    if app_id:
-        print("\n7. Benefits Approve")
-        approve_data = {
-            "application_id": app_id,
-            "approved": True,
-            "amount": 6000,
-            "validity_period": 365,
-            "notes": "Approved based on land records"
-        }
-        result = make_request("POST", "/benefits/approve", approve_data)
-        if result:
-            print(f"✅ Approval Status: {result.get('status', 'N/A')}")
-        else:
-            print("❌ Benefits approve failed")
+    test_endpoint("GET", "/benefits/wallet", headers=AUTH_HEADERS, description="Get user wallet")
     
-    # Test 8: Benefits Wallet
-    print("\n8. Benefits Wallet")
-    result = make_request("GET", "/benefits/wallet")
-    if result:
-        print(f"✅ Wallet Items: {result.get('total_entitlements', 0)}")
-        if result.get('wallet_items'):
-            for item in result['wallet_items']:
-                print(f"   - {item.get('scheme_name', 'Unknown')}: ₹{item.get('amount', 0)}")
-    else:
-        print("❌ Benefits wallet failed")
+    # Test 6: Admin Endpoints (Auth Required)
+    print_section("ADMIN ENDPOINTS")
+    test_endpoint("GET", "/benefits/admin/applications", headers=AUTH_HEADERS, description="Get all applications (admin)")
     
-    # Test 9: Schemes List
-    print("\n9. Schemes List")
-    result = make_request("GET", "/schemes/")
-    if result:
-        print(f"✅ Available Schemes: {result.get('total', 0)}")
-        if result.get('schemes'):
-            for scheme in result['schemes'][:3]:  # Show first 3
-                print(f"   - {scheme.get('name', 'Unknown')}")
-    else:
-        print("❌ Schemes list failed")
+    test_endpoint("POST", "/benefits/admin/approve", {
+        "application_id": 1,
+        "status": "approved",
+        "notes": "Approved for testing"
+    }, AUTH_HEADERS, description="Approve application (admin)")
     
-    # Test 10: OTP Request (no auth needed)
-    print("\n10. OTP Request")
-    otp_data = {
-        "phone": "+919876543210",
-        "purpose": "verification"
-    }
-    result = make_request("POST", "/auth/otp/request", otp_data, use_auth=False)
-    if result:
-        print(f"✅ OTP ID: {result.get('otp_id', 'N/A')}")
-    else:
-        print("❌ OTP request failed")
-    
-    print("\n" + "=" * 50)
-    print("🎉 Testing Complete!")
-    print("=" * 50)
-    print("All endpoints tested with your JWT token.")
-    print("Check results above for any failures.")
+    print_section("TEST COMPLETED")
+    print("🎉 All tests completed!")
+    print("📝 Check the results above to see which endpoints are working")
+    print("💡 If you see connection errors, make sure the server is running with: python run.py")
 
 if __name__ == "__main__":
-    test_all_endpoints()
+    main()

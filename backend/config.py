@@ -1,4 +1,4 @@
-  # DB & environment configuration
+# DB & environment configuration
 
 import os
 
@@ -6,10 +6,10 @@ class Config:
     
     SECRET_KEY = os.getenv("SECRET_KEY", "super-secret-key")
     JWT_SECRET_KEY = os.getenv("JWT_SECRET_KEY", "myjwtsecret")
-    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL")
+    SQLALCHEMY_DATABASE_URI = os.getenv("DATABASE_URL", "sqlite:///idverse.db")
     SQLALCHEMY_TRACK_MODIFICATIONS = False
 
-print(">>> Loaded DATABASE_URL =", os.getenv("DATABASE_URL"))  # 👈 add this
+print(">>> Loaded DATABASE_URL =", os.getenv("DATABASE_URL", "sqlite:///idverse.db"))  # 👈 add this
 
 # theory
 # 2. backend/config.py

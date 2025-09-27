@@ -1,9 +1,6 @@
 from flask import Flask, jsonify
 from flask_cors import CORS
 from flask_migrate import Migrate       # <-- add this import
-from dotenv import load_dotenv
-
-load_dotenv()
 
 from backend.extensions import db, jwt
 from backend.config import Config
@@ -15,7 +12,6 @@ from backend.routes.benefits import benefits_bp
 
 
 def create_app():
-    load_dotenv()
     app = Flask(__name__)
     app.config.from_object(Config)
     CORS(app)

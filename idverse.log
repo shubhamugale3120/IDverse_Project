@@ -1,8 +1,0 @@
-2025-09-21 14:04:03,843 - __main__ - INFO - Set FLASK_ENV = production
-2025-09-21 14:04:03,844 - __main__ - INFO - Set FLASK_DEBUG = False
-2025-09-21 14:04:03,844 - __main__ - INFO - Set DATABASE_URL = sqlite:///./instance/idverse.db
-2025-09-21 14:04:03,845 - __main__ - INFO - Set JWT_SECRET_KEY = myjwtsecret
-2025-09-21 14:04:03,845 - __main__ - INFO - Set SECRET_KEY = super-secret-key-for-development-only
-2025-09-21 14:04:03,845 - __main__ - INFO - Set IPFS_SERVICE_MODE = mock
-2025-09-21 14:04:03,846 - __main__ - INFO - Set SIGNING_SERVICE_MODE = mock
-2025-09-21 14:04:03,846 - __main__ - INFO - Set REGISTRY_SERVICE_MODE = mock

@@ -3,16 +3,46 @@
 import { useState } from "react";
 import { useRouter } from "next/navigation";
 import { FaUser, FaLock, FaIdBadge } from "react-icons/fa";
+import { authAPI } from "../../lib/api";
 
 export default function LoginPage() {
   const router = useRouter();
   const [role, setRole] = useState("citizen");
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
 
-  const handleLogin = () => {
-    if (role === "citizen") router.push("/dashboard");
-    else router.push("/verifier");
+  const handleLogin = async () => {
+    if (!email || !password) {
+      setError("Please fill in all fields");
+      return;
+    }
+
+    setLoading(true);
+    setError("");
+
+    try {
+      const response = await authAPI.login({ email, password });
+      
+      if (response.access_token) {
+        // Store JWT token
+        localStorage.setItem('jwt_token', response.access_token);
+        localStorage.setItem('user_role', role);
+        localStorage.setItem('user_email', email);
+        
+        // Redirect based on role
+        if (role === "citizen") {
+          router.push("/dashboard");
+        } else {
+          router.push("/verifier");
+        }
+      }
+    } catch (err: any) {
+      setError(err.response?.data?.error || "Login failed. Please try again.");
+    } finally {
+      setLoading(false);
+    }
   };
 
   return (
@@ -87,12 +117,20 @@ export default function LoginPage() {
           <button className="hover:text-[#64ffda]">Need Help?</button>
         </div>
 
+        {/* Error Message */}
+        {error && (
+          <div className="w-full mt-4 p-3 bg-red-900/20 border border-red-500 text-red-300 rounded-lg text-sm">
+            {error}
+          </div>
+        )}
+
         {/* Login Button */}
         <button
           onClick={handleLogin}
-          className="w-full mt-6 bg-gradient-to-r from-[#64ffda] to-[#5a5dee] text-[#0d1b2a] font-semibold px-4 py-3 rounded-lg shadow-lg hover:scale-105 transition"
+          disabled={loading}
+          className="w-full mt-6 bg-gradient-to-r from-[#64ffda] to-[#5a5dee] text-[#0d1b2a] font-semibold px-4 py-3 rounded-lg shadow-lg hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          Login
+          {loading ? "Logging in..." : "Login"}
         </button>
 
         {/* Footer */}

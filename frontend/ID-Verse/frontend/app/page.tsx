@@ -44,9 +44,9 @@ export default function IDverseHome() {
         {/* Navigation Links */}
         <div className="flex gap-6 text-[#ccd6f6]">
           <Link href="/" className="hover:text-[#64ffda] transition">Home</Link>
-          <Link href="/dashboard" className="hover:text-[#64ffda] transition">Dashboard</Link>
+          <Link href="/login" className="hover:text-[#64ffda] transition">Login</Link>
+          <Link href="/register" className="hover:text-[#64ffda] transition">Register</Link>
           <Link href="/verifier" className="hover:text-[#64ffda] transition">Verifier</Link>
-          <Link href="/smartcard" className="hover:text-[#64ffda] transition">Smart Card</Link>
         </div>
       </nav>
 
@@ -69,18 +69,29 @@ export default function IDverseHome() {
 
         {/* Hero CTAs */}
         <div className="flex gap-6 flex-wrap justify-center z-10">
+          {/* Register Button → /register */}
+          <Link
+            href="/register"
+            className="bg-gradient-to-r from-[#64ffda] to-[#5a5dee] text-[#0d1b2a] font-semibold px-8 py-3 rounded-lg shadow-lg hover:scale-105 transition text-center"
+          >
+            Create Account
+          </Link>
+
           {/* Citizen Login Button → /login */}
           <Link
             href="/login"
-            className="bg-gradient-to-r from-[#64ffda] to-[#5a5dee] text-[#0d1b2a] font-semibold px-8 py-3 rounded-lg shadow-lg hover:scale-105 transition text-center"
+            className="border border-[#64ffda] text-[#64ffda] px-8 py-3 rounded-lg shadow-lg hover:bg-[#112240] transition text-center"
           >
             Citizen Login
           </Link>
 
-          {/* Verifier Portal Button (not connected yet) */}
-          <button className="border border-[#64ffda] text-[#64ffda] px-8 py-3 rounded-lg shadow-lg hover:bg-[#112240] transition">
+          {/* Verifier Portal Button → /verifier */}
+          <Link
+            href="/verifier"
+            className="border border-[#5a5dee] text-[#5a5dee] px-8 py-3 rounded-lg shadow-lg hover:bg-[#112240] transition text-center"
+          >
             Verifier Portal
-          </button>
+          </Link>
         </div>
 
         {/* Quick stats below hero */}

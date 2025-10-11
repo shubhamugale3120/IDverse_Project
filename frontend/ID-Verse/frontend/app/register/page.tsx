@@ -2,44 +2,61 @@
 
 import { useState } from "react";
 import { useRouter } from "next/navigation";
-import { FaUser, FaLock, FaIdBadge } from "react-icons/fa";
+import { FaUser, FaLock, FaEnvelope, FaIdBadge } from "react-icons/fa";
 import { authAPI } from "../../lib/api";
 
-export default function LoginPage() {
+export default function RegisterPage() {
   const router = useRouter();
-  const [role, setRole] = useState("citizen");
-  const [email, setEmail] = useState("");
-  const [password, setPassword] = useState("");
+  const [formData, setFormData] = useState({
+    username: "",
+    email: "",
+    password: "",
+    confirmPassword: ""
+  });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
+  const [success, setSuccess] = useState("");
 
-  const handleLogin = async () => {
-    if (!email || !password) {
+  const handleInputChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    setFormData({
+      ...formData,
+      [e.target.name]: e.target.value
+    });
+  };
+
+  const handleRegister = async () => {
+    if (!formData.username || !formData.email || !formData.password) {
       setError("Please fill in all fields");
+      return;
+    }
+
+    if (formData.password !== formData.confirmPassword) {
+      setError("Passwords do not match");
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      setError("Password must be at least 6 characters");
       return;
     }
 
     setLoading(true);
     setError("");
+    setSuccess("");
 
     try {
-      const response = await authAPI.login({ email, password });
+      const response = await authAPI.register({
+        username: formData.username,
+        email: formData.email,
+        password: formData.password
+      });
       
-      if (response.access_token) {
-        // Store JWT token
-        localStorage.setItem('jwt_token', response.access_token);
-        localStorage.setItem('user_role', role);
-        localStorage.setItem('user_email', email);
-        
-        // Redirect based on role
-        if (role === "citizen") {
-          router.push("/dashboard");
-        } else {
-          router.push("/verifier");
-        }
-      }
+      setSuccess("Account created successfully! Please login.");
+      setTimeout(() => {
+        router.push("/login");
+      }, 2000);
     } catch (err: any) {
-      setError(err.response?.data?.error || "Login failed. Please try again.");
+      setError(err.response?.data?.error || "Registration failed. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -69,9 +86,9 @@ export default function LoginPage() {
             <path d="M12 1l9 4v6c0 5-3 9-9 11S3 16 3 11V5l9-4z" />
           </svg>
           <h2 className="text-3xl font-bold bg-gradient-to-r from-[#64ffda] to-[#5a5dee] text-transparent bg-clip-text">
-            IDverse Login
+            Create Account
           </h2>
-          <p className="text-sm text-gray-400 mt-2">Secure Access • Verified Identity</p>
+          <p className="text-sm text-gray-400 mt-2">Join IDverse • Secure Digital Identity</p>
         </div>
 
         {/* Inputs */}
@@ -79,11 +96,24 @@ export default function LoginPage() {
           <div className="relative">
             <FaUser className="absolute left-3 top-3 text-gray-400" />
             <input
+              type="text"
+              name="username"
+              placeholder="Username"
+              className="w-full p-3 pl-10 rounded-lg bg-[#112240] text-gray-200 border border-[#1d3557] focus:outline-none focus:ring-2 focus:ring-[#64ffda]"
+              value={formData.username}
+              onChange={handleInputChange}
+            />
+          </div>
+
+          <div className="relative">
+            <FaEnvelope className="absolute left-3 top-3 text-gray-400" />
+            <input
               type="email"
+              name="email"
               placeholder="Email Address"
               className="w-full p-3 pl-10 rounded-lg bg-[#112240] text-gray-200 border border-[#1d3557] focus:outline-none focus:ring-2 focus:ring-[#64ffda]"
-              value={email}
-              onChange={(e) => setEmail(e.target.value)}
+              value={formData.email}
+              onChange={handleInputChange}
             />
           </div>
 
@@ -91,57 +121,58 @@ export default function LoginPage() {
             <FaLock className="absolute left-3 top-3 text-gray-400" />
             <input
               type="password"
-              placeholder="Password"
+              name="password"
+              placeholder="Password (min 6 characters)"
               className="w-full p-3 pl-10 rounded-lg bg-[#112240] text-gray-200 border border-[#1d3557] focus:outline-none focus:ring-2 focus:ring-[#5a5dee]"
-              value={password}
-              onChange={(e) => setPassword(e.target.value)}
+              value={formData.password}
+              onChange={handleInputChange}
             />
           </div>
 
           <div className="relative">
-            <FaIdBadge className="absolute left-3 top-3 text-gray-400" />
-            <select
-              value={role}
-              onChange={(e) => setRole(e.target.value)}
-              className="w-full p-3 pl-10 rounded-lg bg-[#112240] text-gray-200 border border-[#1d3557] focus:outline-none focus:ring-2 focus:ring-[#64ffda]"
-            >
-              <option value="citizen">Citizen</option>
-              <option value="verifier">Verifier</option>
-            </select>
+            <FaLock className="absolute left-3 top-3 text-gray-400" />
+            <input
+              type="password"
+              name="confirmPassword"
+              placeholder="Confirm Password"
+              className="w-full p-3 pl-10 rounded-lg bg-[#112240] text-gray-200 border border-[#1d3557] focus:outline-none focus:ring-2 focus:ring-[#5a5dee]"
+              value={formData.confirmPassword}
+              onChange={handleInputChange}
+            />
           </div>
         </div>
 
-        {/* Forgot Password + Help */}
-        <div className="flex justify-between mt-4 text-sm text-gray-400">
-          <button className="hover:text-[#64ffda]">Forgot Password?</button>
-          <button className="hover:text-[#64ffda]">Need Help?</button>
-        </div>
-
-        {/* Error Message */}
+        {/* Error/Success Messages */}
         {error && (
           <div className="w-full mt-4 p-3 bg-red-900/20 border border-red-500 text-red-300 rounded-lg text-sm">
             {error}
           </div>
         )}
 
-        {/* Login Button */}
+        {success && (
+          <div className="w-full mt-4 p-3 bg-green-900/20 border border-green-500 text-green-300 rounded-lg text-sm">
+            {success}
+          </div>
+        )}
+
+        {/* Register Button */}
         <button
-          onClick={handleLogin}
+          onClick={handleRegister}
           disabled={loading}
           className="w-full mt-6 bg-gradient-to-r from-[#64ffda] to-[#5a5dee] text-[#0d1b2a] font-semibold px-4 py-3 rounded-lg shadow-lg hover:scale-105 transition disabled:opacity-50 disabled:cursor-not-allowed"
         >
-          {loading ? "Logging in..." : "Login"}
+          {loading ? "Creating Account..." : "Create Account"}
         </button>
 
-        {/* Register Link */}
+        {/* Login Link */}
         <div className="text-center mt-6">
           <p className="text-gray-400 text-sm">
-            Don't have an account?{" "}
+            Already have an account?{" "}
             <button 
-              onClick={() => router.push("/register")}
+              onClick={() => router.push("/login")}
               className="text-[#64ffda] hover:underline"
             >
-              Create one here
+              Login here
             </button>
           </p>
         </div>

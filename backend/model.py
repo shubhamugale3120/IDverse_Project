@@ -220,6 +220,7 @@ class BenefitApplication(db.Model):
     
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)  # Application creation time
+    applied_at = db.Column(db.DateTime, default=datetime.utcnow)  # Application submission time
     updated_at = db.Column(db.DateTime, default=datetime.utcnow, onupdate=datetime.utcnow)  # Last update time
 
     def to_dict(self):

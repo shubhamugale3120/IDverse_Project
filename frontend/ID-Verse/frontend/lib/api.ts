@@ -131,4 +131,28 @@ export const healthCheck = async () => {
   return response.data;
 };
 
+// Transactions API
+export const transactionsAPI = {
+  getTransactions: async () => {
+    const response = await api.get('/transactions/');
+    return response.data;
+  },
+  getSummary: async () => {
+    const response = await api.get('/transactions/summary');
+    return response.data;
+  },
+};
+
+// QR Code API
+export const qrAPI = {
+  generate: async () => {
+    const response = await api.post('/qr/generate');
+    return response.data;
+  },
+  getSmartCard: async () => {
+    const response = await api.get('/qr/smartcard');
+    return response.data;
+  },
+};
+
 export default api;

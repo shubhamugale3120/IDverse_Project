@@ -2,12 +2,15 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { schemesAPI, benefitsAPI } from "../../lib/api";
+import { schemesAPI, benefitsAPI, transactionsAPI, qrAPI } from "../../lib/api";
 
 export default function Dashboard() {
   const router = useRouter();
   const [schemes, setSchemes] = useState([]);
   const [wallet, setWallet] = useState({ balance: "₹0", transactions: [] });
+  const [transactions, setTransactions] = useState([]);
+  const [qrData, setQrData] = useState("");
+  const [smartCardData, setSmartCardData] = useState(null);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -51,10 +54,11 @@ export default function Dashboard() {
   const handleApplyScheme = async (schemeId: number) => {
     try {
       const response = await benefitsAPI.apply({
-        scheme_id: schemeId,
-        citizen_data: {
+        scheme: schemes[0]?.name || "General Citizen Benefit", // Use scheme name instead of ID
+        application_data: {
           email: localStorage.getItem('user_email'),
-          role: localStorage.getItem('user_role')
+          role: localStorage.getItem('user_role'),
+          scheme_id: schemeId
         }
       });
       
@@ -62,6 +66,73 @@ export default function Dashboard() {
       loadDashboardData(); // Refresh data
     } catch (err: any) {
       alert(err.response?.data?.error || "Failed to apply for scheme");
+    }
+  };
+
+  const handleViewTransactions = async () => {
+    try {
+      const response = await transactionsAPI.getTransactions();
+      setTransactions(response.transactions || []);
+      
+      // Show transactions in a simple alert for now
+      const transactionList = response.transactions?.slice(0, 5).map(t => 
+        `${t.type}: ${t.description} - ${t.amount} ${t.currency}`
+      ).join('\n') || 'No transactions found';
+      
+      alert(`Recent Transactions:\n${transactionList}`);
+    } catch (err: any) {
+      alert(err.response?.data?.error || "Failed to load transactions");
+    }
+  };
+
+  const handleGenerateQR = async () => {
+    try {
+      const response = await qrAPI.generate();
+      setQrData(response.qr_text);
+      
+      // Show QR data in alert for now
+      alert(`QR Code Generated!\n\nData: ${response.qr_text.substring(0, 200)}...`);
+    } catch (err: any) {
+      alert(err.response?.data?.error || "Failed to generate QR code");
+    }
+  };
+
+  const handleViewSmartCard = async () => {
+    try {
+      const response = await qrAPI.getSmartCard();
+      setSmartCardData(response);
+      
+      // Show smart card data in alert for now
+      const cardInfo = `Smart Card Data:
+IDverse Number: ${response.user.idverse_number}
+Username: ${response.user.username}
+Email: ${response.user.email}
+VCs: ${response.verifiable_credentials.length}
+Benefits: ${response.benefits.total_applications} applications`;
+      
+      alert(cardInfo);
+    } catch (err: any) {
+      alert(err.response?.data?.error || "Failed to load smart card data");
+    }
+  };
+
+  const handleCheckSchemeStatus = async () => {
+    try {
+      const response = await benefitsAPI.getApplications();
+      const applications = response.applications || [];
+      
+      if (applications.length === 0) {
+        alert("No applications found");
+        return;
+      }
+      
+      const statusList = applications.map(app => 
+        `${app.scheme_name}: ${app.status}`
+      ).join('\n');
+      
+      alert(`Application Status:\n${statusList}`);
+    } catch (err: any) {
+      alert(err.response?.data?.error || "Failed to load application status");
     }
   };
 
@@ -171,8 +242,11 @@ export default function Dashboard() {
           <h2 className="text-xl font-semibold mb-4">IDverse Wallet</h2>
           <p className="text-gray-300 mb-2">Balance: {citizen.walletBalance}</p>
           <p className="text-gray-300">Last Benefit: Old Age Pension (₹500)</p>
-          <button className="mt-4 w-full bg-gradient-to-r from-[#64ffda] to-[#5a5dee] text-[#0a192f] font-semibold px-4 py-2 rounded-lg hover:scale-105 transition">
-            View Transactions
+          <button 
+            onClick={handleViewTransactions}
+            className="mt-4 w-full bg-gradient-to-r from-[#64ffda] to-[#5a5dee] text-[#0a192f] font-semibold px-4 py-2 rounded-lg hover:scale-105 transition"
+          >
+            View Transactions ({transactions.length})
           </button>
         </section>
 
@@ -190,9 +264,24 @@ export default function Dashboard() {
         <section className="bg-[#112240] p-6 rounded-lg shadow">
           <h2 className="text-xl font-semibold mb-4">Quick Actions</h2>
           <ul className="space-y-3">
-            <li><button className="w-full bg-[#64ffda] text-[#0a192f] px-3 py-2 rounded-lg">Generate QR</button></li>
-            <li><button className="w-full border border-[#64ffda] text-[#64ffda] px-3 py-2 rounded-lg">View Smart Card</button></li>
-            <li><button className="w-full border border-[#5a5dee] text-[#5a5dee] px-3 py-2 rounded-lg">Check Scheme Status</button></li>
+            <li><button 
+              onClick={handleGenerateQR}
+              className="w-full bg-[#64ffda] text-[#0a192f] px-3 py-2 rounded-lg hover:scale-105 transition"
+            >
+              Generate QR
+            </button></li>
+            <li><button 
+              onClick={handleViewSmartCard}
+              className="w-full border border-[#64ffda] text-[#64ffda] px-3 py-2 rounded-lg hover:scale-105 transition"
+            >
+              View Smart Card
+            </button></li>
+            <li><button 
+              onClick={handleCheckSchemeStatus}
+              className="w-full border border-[#5a5dee] text-[#5a5dee] px-3 py-2 rounded-lg hover:scale-105 transition"
+            >
+              Check Scheme Status
+            </button></li>
           </ul>
         </section>
       </div>

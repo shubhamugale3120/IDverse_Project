@@ -217,6 +217,7 @@ class BenefitApplication(db.Model):
     # Authority information
     reviewed_by = db.Column(db.String(255), nullable=True)  # Authority who reviewed
     reviewed_at = db.Column(db.DateTime, nullable=True)  # Review timestamp
+    approved_at = db.Column(db.DateTime, nullable=True)  # Approval timestamp
     
     # Timestamps
     created_at = db.Column(db.DateTime, default=datetime.utcnow)  # Application creation time

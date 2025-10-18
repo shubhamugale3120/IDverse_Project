@@ -2,7 +2,7 @@
 
 import { useState, useEffect } from "react";
 import { useRouter } from "next/navigation";
-import { schemesAPI, benefitsAPI, transactionsAPI, qrAPI } from "../../lib/api";
+import { schemesAPI, benefitsAPI, transactionsAPI, qrAPI, documentsAPI, linkedIdsAPI } from "../../lib/api";
 
 export default function Dashboard() {
   const router = useRouter();
@@ -11,6 +11,8 @@ export default function Dashboard() {
   const [transactions, setTransactions] = useState([]);
   const [qrData, setQrData] = useState("");
   const [smartCardData, setSmartCardData] = useState(null);
+  const [documents, setDocuments] = useState([]);
+  const [linkedIds, setLinkedIds] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState("");
 
@@ -136,6 +138,70 @@ Benefits: ${response.benefits.total_applications} applications`;
     }
   };
 
+  const handleUploadDocument = async (event: React.ChangeEvent<HTMLInputElement>) => {
+    const file = event.target.files?.[0];
+    if (!file) return;
+    
+    try {
+      const response = await documentsAPI.upload(file);
+      alert(`Document uploaded successfully!\nFilename: ${response.filename}\nCID: ${response.cid}`);
+      loadDocuments(); // Refresh document list
+    } catch (err: any) {
+      alert(err.response?.data?.error || "Upload failed");
+    }
+  };
+
+  const loadDocuments = async () => {
+    try {
+      const response = await documentsAPI.list();
+      setDocuments(response.documents || []);
+    } catch (err) {
+      console.error("Failed to load documents:", err);
+    }
+  };
+
+  const handleViewStoredDocs = async () => {
+    try {
+      await loadDocuments();
+      const docList = documents.map(doc => 
+        `${doc.filename} (${doc.file_size} bytes)`
+      ).join('\n') || 'No documents found';
+      
+      alert(`Stored Documents:\n${docList}`);
+    } catch (err: any) {
+      alert(err.response?.data?.error || "Failed to load documents");
+    }
+  };
+
+  const loadLinkedIds = async () => {
+    try {
+      const response = await linkedIdsAPI.getLinkedIds();
+      setLinkedIds(response.linked_ids || []);
+    } catch (err) {
+      console.error("Failed to load linked IDs:", err);
+    }
+  };
+
+  const handleLinkNewId = async () => {
+    const idType = prompt("Enter ID type (aadhaar, pan, voter_id, passport):");
+    const idNumber = prompt("Enter ID number:");
+    
+    if (!idType || !idNumber) return;
+    
+    try {
+      const response = await linkedIdsAPI.linkId({
+        type: idType,
+        number: idNumber,
+        name: idType.replace("_", " ").toUpperCase()
+      });
+      
+      alert(`ID linked successfully!\nType: ${response.linked_id.type}\nNumber: ${response.linked_id.number}`);
+      loadLinkedIds(); // Refresh linked IDs
+    } catch (err: any) {
+      alert(err.response?.data?.error || "Failed to link ID");
+    }
+  };
+
   const citizen = {
     name: "Demo User", // This would come from user profile API
     idverseNo: "IDV-9876-5432",
@@ -195,16 +261,22 @@ Benefits: ${response.benefits.total_applications} applications`;
         </header>
 
       <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-        {/* Linked IDs */}
-        <section className="bg-[#112240] p-6 rounded-lg shadow">
-          <h2 className="text-xl font-semibold mb-4">Linked IDs</h2>
-          <ul className="space-y-2 text-gray-300">
-            <li>🆔 Aadhaar: ****1234</li>
-            <li>💳 PAN: ****5678</li>
-            <li>🗳 Voter ID: Linked</li>
-            <li>🌐 Passport: Not Linked</li>
-          </ul>
-        </section>
+              {/* Linked IDs */}
+              <section className="bg-[#112240] p-6 rounded-lg shadow">
+                <h2 className="text-xl font-semibold mb-4">Linked IDs</h2>
+                <ul className="space-y-2 text-gray-300 mb-4">
+                  <li>🆔 Aadhaar: ****1234</li>
+                  <li>💳 PAN: ****5678</li>
+                  <li>🗳 Voter ID: Linked</li>
+                  <li>🌐 Passport: Not Linked</li>
+                </ul>
+                <button 
+                  onClick={handleLinkNewId}
+                  className="w-full bg-[#64ffda] text-[#0a192f] px-3 py-2 rounded-lg hover:scale-105 transition text-sm"
+                >
+                  Link New ID
+                </button>
+              </section>
 
         {/* Eligibility */}
         <section className="bg-[#112240] p-6 rounded-lg shadow">
@@ -255,8 +327,24 @@ Benefits: ${response.benefits.total_applications} applications`;
           <h2 className="text-xl font-semibold mb-4">Secure Document Vault</h2>
           <p className="text-gray-400 mb-4">Your documents are encrypted & stored via IPFS.</p>
           <div className="flex gap-4">
-            <button className="bg-[#64ffda] text-[#0a192f] px-4 py-2 rounded-lg">Upload Document</button>
-            <button className="border border-[#64ffda] text-[#64ffda] px-4 py-2 rounded-lg">View Stored Docs</button>
+            <button 
+              onClick={() => document.getElementById('fileInput')?.click()}
+              className="bg-[#64ffda] text-[#0a192f] px-4 py-2 rounded-lg hover:scale-105 transition"
+            >
+              Upload Document ({documents.length})
+            </button>
+            <input
+              id="fileInput"
+              type="file"
+              onChange={handleUploadDocument}
+              style={{ display: 'none' }}
+            />
+            <button 
+              onClick={handleViewStoredDocs}
+              className="border border-[#64ffda] text-[#64ffda] px-4 py-2 rounded-lg hover:scale-105 transition"
+            >
+              View Stored Docs
+            </button>
           </div>
         </section>
 

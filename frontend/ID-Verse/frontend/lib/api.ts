@@ -155,4 +155,40 @@ export const qrAPI = {
   },
 };
 
+// Documents API
+export const documentsAPI = {
+  upload: async (file: File) => {
+    const formData = new FormData();
+    formData.append('file', file);
+    const response = await api.post('/documents/upload', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' }
+    });
+    return response.data;
+  },
+  list: async () => {
+    const response = await api.get('/documents/list');
+    return response.data;
+  },
+  getTypes: async () => {
+    const response = await api.get('/documents/types');
+    return response.data;
+  },
+};
+
+// Linked IDs API
+export const linkedIdsAPI = {
+  getLinkedIds: async () => {
+    const response = await api.get('/linked-ids/');
+    return response.data;
+  },
+  linkId: async (data: any) => {
+    const response = await api.post('/linked-ids/link', data);
+    return response.data;
+  },
+  verifyId: async (data: any) => {
+    const response = await api.post('/linked-ids/verify', data);
+    return response.data;
+  },
+};
+
 export default api;

@@ -11,7 +11,7 @@
 # #
 
 # backend/model.py
-# Database models for IDVerse project
+# Database models for IDVerse project  create a new model
 from backend.extensions import db
 from werkzeug.security import generate_password_hash, check_password_hash
 from datetime import datetime

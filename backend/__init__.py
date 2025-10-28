@@ -11,8 +11,6 @@ from backend.routes.vc import vc_bp
 from backend.routes.benefits import benefits_bp
 from backend.routes.transactions import transactions_bp
 from backend.routes.qr import qr_bp
-from backend.routes.documents import documents_bp
-from backend.routes.linked_ids import linked_ids_bp
 
 
 def create_app():
@@ -32,8 +30,6 @@ def create_app():
     app.register_blueprint(benefits_bp)
     app.register_blueprint(transactions_bp)
     app.register_blueprint(qr_bp)
-    app.register_blueprint(documents_bp)
-    app.register_blueprint(linked_ids_bp)
 
     @app.get("/health")
     def health():

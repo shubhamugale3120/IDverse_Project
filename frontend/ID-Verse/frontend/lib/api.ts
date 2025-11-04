@@ -87,7 +87,7 @@ export const vcAPI = {
   },
 
   // Present VC
-  present: async (vcData: { vc: any }) => {
+  present: async (vcData: { vc?: any; vc_id?: string; disclosed?: any; challenge?: string; cid?: string }) => {
     const response = await api.post('/vc/present', vcData);
     return response.data;
   },
@@ -95,6 +95,18 @@ export const vcAPI = {
   // Get VC Status
   getStatus: async (vcId: string) => {
     const response = await api.get(`/vc/status/${vcId}`);
+    return response.data;
+  },
+
+  // Get verifier challenge
+  getChallenge: async () => {
+    const response = await api.get('/vc/challenge');
+    return response.data;
+  },
+
+  // Get issuer info (DID, public key)
+  getIssuerInfo: async () => {
+    const response = await api.get('/vc/issuer-info');
     return response.data;
   },
 };

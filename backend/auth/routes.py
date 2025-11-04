@@ -2,6 +2,7 @@
 from flask import Blueprint, request, jsonify  # Blueprint: route grouping, request: HTTP data, jsonify: JSON response
 from flask_jwt_extended import create_access_token, jwt_required, get_jwt_identity  # JWT: authentication tokens
 from backend.extensions import db  # Database connection
+from sqlalchemy.exc import IntegrityError
 from backend.model import User  # User database model
 
 # Create authentication blueprint with URL prefix "/auth"
@@ -44,6 +45,11 @@ def register():
         # Return error with HTTP status 409 (Conflict)
         return jsonify({"error": "Email already registered"}), 409
 
+    # Check if username already exists as well to avoid DB integrity error
+    existing_username = User.query.filter_by(username=username).first()
+    if existing_username:
+        return jsonify({"error": "Username already taken"}), 409
+
     # Create new User object
     user = User(username=username, email=email)  # User model constructor
     
@@ -53,7 +59,11 @@ def register():
     
     # Add user to database session
     db.session.add(user)  # Add to SQLAlchemy session (not yet saved)
-    db.session.commit()   # Commit transaction to database
+    try:
+        db.session.commit()   # Commit transaction to database
+    except IntegrityError:
+        db.session.rollback()
+        return jsonify({"error": "User already exists"}), 409
 
     # Return success response with HTTP status 201 (Created)
     return jsonify({"msg": "User registered successfully"}), 201

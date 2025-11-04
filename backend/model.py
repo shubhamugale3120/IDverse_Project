@@ -145,6 +145,7 @@ class VerifiableCredential(db.Model):
     ipfs_cid = db.Column(db.String(255), nullable=True, index=True)  # IPFS Content Identifier
     blockchain_tx_hash = db.Column(db.String(255), nullable=True, index=True)  # Blockchain transaction hash
     registry_address = db.Column(db.String(255), nullable=True)  # Smart contract address
+    onchain_vc_id = db.Column(db.Integer, nullable=True)  # Numeric on-chain VC ID (for persistence)
     
     # Status and lifecycle
     is_revoked = db.Column(db.Boolean, default=False)  # Revocation status
@@ -170,6 +171,7 @@ class VerifiableCredential(db.Model):
             'ipfs_cid': self.ipfs_cid,
             'blockchain_tx_hash': self.blockchain_tx_hash,
             'registry_address': self.registry_address,
+            'onchain_vc_id': self.onchain_vc_id,
             'is_revoked': self.is_revoked,
             'revoked_at': self.revoked_at.isoformat() if self.revoked_at else None,
             'revoked_by': self.revoked_by,

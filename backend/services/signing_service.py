@@ -32,6 +32,11 @@ class SigningServiceInterface(ABC):
         """Get the issuer's DID (Decentralized Identifier)"""
         pass
 
+    @abstractmethod
+    def get_public_key(self) -> str:
+        """Return issuer public key in hex (or stable identifier for mock)."""
+        pass
+
 
 class MockSigningService(SigningServiceInterface):
     """
@@ -92,6 +97,9 @@ class MockSigningService(SigningServiceInterface):
         """Get mock issuer DID"""
         return self.issuer_did
 
+    def get_public_key(self) -> str:
+        return self.public_key
+
 
 class Ed25519SigningService(SigningServiceInterface):
     """
@@ -114,9 +122,14 @@ class Ed25519SigningService(SigningServiceInterface):
         
         # Set issuer DID
         self.issuer_did = issuer_did or "did:example:issuer"
-        
-        # Load or generate key pair
-        self.private_key, self.public_key = self._load_or_generate_keys()
+
+        # Load or generate key pair (env override if provided)
+        env_priv = os.getenv("ISSUER_PRIVATE_KEY_HEX")
+        env_pub = os.getenv("ISSUER_PUBLIC_KEY_HEX")
+        if env_priv and env_pub:
+            self.private_key, self.public_key = self._load_keys_from_env(env_priv, env_pub)
+        else:
+            self.private_key, self.public_key = self._load_or_generate_keys()
     
     def _load_or_generate_keys(self) -> Tuple[bytes, bytes]:
         """Load existing keys or generate new ones"""
@@ -125,6 +138,13 @@ class Ed25519SigningService(SigningServiceInterface):
         private_key = self.ed25519.Ed25519PrivateKey.generate()
         public_key = private_key.public_key()
         
+        return private_key, public_key
+
+    def _load_keys_from_env(self, priv_hex: str, pub_hex: str) -> Tuple[bytes, bytes]:
+        private_key_bytes = bytes.fromhex(priv_hex)
+        public_key_bytes = bytes.fromhex(pub_hex)
+        private_key = self.ed25519.Ed25519PrivateKey.from_private_bytes(private_key_bytes)
+        public_key = self.ed25519.Ed25519PublicKey.from_public_bytes(public_key_bytes)
         return private_key, public_key
     
     def generate_keypair(self) -> Tuple[str, str]:
@@ -210,6 +230,13 @@ class Ed25519SigningService(SigningServiceInterface):
     def get_issuer_did(self) -> str:
         """Get issuer DID"""
         return self.issuer_did
+
+    def get_public_key(self) -> str:
+        """Return public key as hex string"""
+        return self.public_key.public_bytes(
+            encoding=self.serialization.Encoding.Raw,
+            format=self.serialization.PublicFormat.Raw
+        ).hex()
 
 
 def get_signing_service() -> SigningServiceInterface:

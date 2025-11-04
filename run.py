@@ -11,6 +11,13 @@ import os
 project_root = os.path.dirname(os.path.abspath(__file__))
 sys.path.insert(0, project_root)
 
+# Load environment variables from .env if present
+try:
+    from dotenv import load_dotenv  # type: ignore
+    load_dotenv(os.path.join(project_root, '.env'))
+except Exception:
+    pass
+
 from backend import create_app
 
 if __name__ == "__main__":

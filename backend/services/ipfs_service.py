@@ -106,7 +106,14 @@ class RealIPFSService(IPFSServiceInterface):
             
             # Add to IPFS
             result = self.client.add_str(json_str)
-            cid = result['Hash']
+            # ipfshttpclient.add_str returns a CID string in recent versions;
+            # older versions may return a dict. Support both.
+            if isinstance(result, str):
+                cid = result
+            else:
+                cid = result.get('Hash') or result.get('Cid') or result.get('cid')
+                if not cid:
+                    raise RuntimeError(f"Unexpected IPFS add_str response: {result}")
             
             return cid
         except Exception as e:
@@ -141,6 +148,50 @@ class RealIPFSService(IPFSServiceInterface):
             return False
 
 
+class Web3StorageIPFSService(IPFSServiceInterface):
+    """IPFS service using Web3.Storage HTTP API (token-based)."""
+    def __init__(self, token: str, gateway: str = "https://w3s.link/ipfs/"):
+        self.token = token
+        self.gateway = gateway.rstrip('/') + '/'
+        try:
+            import requests  # noqa: F401
+            self.requests = __import__('requests')
+        except ImportError:
+            raise ImportError("requests not installed. Run: pip install requests")
+
+    def upload_json(self, data: Dict[str, Any]) -> str:
+        try:
+            json_str = json.dumps(data, sort_keys=True, separators=(',', ':'))
+            headers = {
+                'Authorization': f'Bearer {self.token}',
+                'Content-Type': 'application/json',
+                'Accept': 'application/json'
+            }
+            resp = self.requests.post('https://api.web3.storage/upload', data=json_str.encode('utf-8'), headers=headers, timeout=30)
+            resp.raise_for_status()
+            j = resp.json()
+            cid = j.get('cid') or (j.get('value') or {}).get('cid')
+            if not cid:
+                raise RuntimeError(f"Unexpected web3.storage response: {j}")
+            return cid
+        except Exception as e:
+            raise RuntimeError(f"Failed to upload to Web3.Storage: {e}")
+
+    def get_json(self, cid: str) -> Optional[Dict[str, Any]]:
+        try:
+            url = f"{self.gateway}{cid}"
+            resp = self.requests.get(url, timeout=30)
+            if resp.status_code != 200:
+                return None
+            return resp.json()
+        except Exception:
+            return None
+
+    def pin_cid(self, cid: str) -> bool:
+        # Web3.Storage auto-pins; treat as success
+        return True
+
+
 def get_ipfs_service() -> IPFSServiceInterface:
     """
     Factory function to get IPFS service based on environment configuration
@@ -153,6 +204,12 @@ def get_ipfs_service() -> IPFSServiceInterface:
         ipfs_host = os.getenv('IPFS_HOST', '127.0.0.1')
         ipfs_port = int(os.getenv('IPFS_PORT', '5001'))
         return RealIPFSService(ipfs_host, ipfs_port)
+    elif ipfs_mode == 'web3':
+        token = os.getenv('WEB3_STORAGE_TOKEN')
+        if not token:
+            raise ValueError('WEB3_STORAGE_TOKEN is required for IPFS_MODE=web3')
+        gateway = os.getenv('WEB3_STORAGE_GATEWAY', 'https://w3s.link/ipfs/')
+        return Web3StorageIPFSService(token=token, gateway=gateway)
     else:
         # Default to mock for development
         return MockIPFSService()

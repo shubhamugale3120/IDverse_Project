@@ -6,8 +6,15 @@
 import os
 import json
 import hashlib
+import time
 from typing import Dict, Any, Optional
 from abc import ABC, abstractmethod
+
+# Add retry/backoff defaults (this is the changed section)
+MAX_IPFS_RETRIES = int(os.getenv("IPFS_MAX_RETRIES", "3"))
+IPFS_RETRY_BACKOFF = float(os.getenv("IPFS_RETRY_BACKOFF", "1.5"))
+# ...existing code...
+
 
 class IPFSServiceInterface(ABC):
     """Abstract interface for IPFS operations"""
@@ -160,22 +167,46 @@ class Web3StorageIPFSService(IPFSServiceInterface):
             raise ImportError("requests not installed. Run: pip install requests")
 
     def upload_json(self, data: Dict[str, Any]) -> str:
-        try:
-            json_str = json.dumps(data, sort_keys=True, separators=(',', ':'))
-            headers = {
-                'Authorization': f'Bearer {self.token}',
-                'Content-Type': 'application/json',
-                'Accept': 'application/json'
-            }
-            resp = self.requests.post('https://api.web3.storage/upload', data=json_str.encode('utf-8'), headers=headers, timeout=30)
-            resp.raise_for_status()
-            j = resp.json()
-            cid = j.get('cid') or (j.get('value') or {}).get('cid')
-            if not cid:
-                raise RuntimeError(f"Unexpected web3.storage response: {j}")
-            return cid
-        except Exception as e:
-            raise RuntimeError(f"Failed to upload to Web3.Storage: {e}")
+        # Patched: validate token, retry on 5xx/network errors, return clear error codes
+        if not self.token:
+            raise RuntimeError("ERROR_NO_TOKEN: WEB3_STORAGE_TOKEN is not set or empty")
+
+        json_str = json.dumps(data, sort_keys=True, separators=(',', ':'))
+        headers = {
+            'Authorization': f'Bearer {self.token}',
+            'Content-Type': 'application/json',
+            'Accept': 'application/json'
+        }
+
+        last_err = None
+        for attempt in range(1, MAX_IPFS_RETRIES + 1):
+            try:
+                resp = self.requests.post('https://api.web3.storage/upload',
+                                          data=json_str.encode('utf-8'),
+                                          headers=headers,
+                                          timeout=30)
+                # explicit handling
+                if resp.status_code in (200, 202):
+                    j = resp.json()
+                    cid = j.get('cid') or (j.get('value') or {}).get('cid')
+                    if not cid:
+                        raise RuntimeError(f"Unexpected web3.storage response: {j}")
+                    return cid
+                if resp.status_code in (401, 403):
+                    # token invalid or unauthorized
+                    raise RuntimeError(f"ERROR_NO_TOKEN: Web3.Storage returned {resp.status_code} - {resp.text}")
+                if 400 <= resp.status_code < 500:
+                    # client error -> do not retry
+                    raise RuntimeError(f"Web3.Storage client error: {resp.status_code} {resp.text}")
+                # 5xx -> retryable
+                last_err = RuntimeError(f"Web3.Storage server error: {resp.status_code} {resp.text}")
+            except Exception as e:
+                last_err = e
+            # backoff between retries
+            time.sleep(IPFS_RETRY_BACKOFF * attempt)
+
+        # all retries failed
+        raise RuntimeError(f"Failed to upload to Web3.Storage after {MAX_IPFS_RETRIES} attempts: {last_err}")
 
     def get_json(self, cid: str) -> Optional[Dict[str, Any]]:
         try:
@@ -198,20 +229,25 @@ def get_ipfs_service() -> IPFSServiceInterface:
     Returns mock or real implementation based on IPFS_MODE setting
     """
     ipfs_mode = os.getenv('IPFS_MODE', 'mock').lower()
-    
+
     if ipfs_mode == 'real':
-        # Real IPFS configuration
         ipfs_host = os.getenv('IPFS_HOST', '127.0.0.1')
         ipfs_port = int(os.getenv('IPFS_PORT', '5001'))
         return RealIPFSService(ipfs_host, ipfs_port)
-    elif ipfs_mode == 'web3':
+    elif ipfs_mode in ('web3', 'w3', 'web3.storage', 'auto'):
         token = os.getenv('WEB3_STORAGE_TOKEN')
-        if not token:
-            raise ValueError('WEB3_STORAGE_TOKEN is required for IPFS_MODE=web3')
+        if not token and ipfs_mode != 'auto':
+            # raise clear error for caller to handle and return meaningful HTTP code
+            raise ValueError('ERROR_NO_TOKEN: WEB3_STORAGE_TOKEN is required for IPFS_MODE=web3')
         gateway = os.getenv('WEB3_STORAGE_GATEWAY', 'https://w3s.link/ipfs/')
-        return Web3StorageIPFSService(token=token, gateway=gateway)
+        # In 'auto' mode, if token missing or upload fails, caller can still run with mock by toggling env.
+        try:
+            if token:
+                return Web3StorageIPFSService(token=token, gateway=gateway)
+        except Exception:
+            pass
+        return MockIPFSService()
     else:
-        # Default to mock for development
         return MockIPFSService()
 
 

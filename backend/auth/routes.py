@@ -112,15 +112,15 @@ def login():
         }
     }), 200
 
-    # Debug helper: list all users (secured)
-    @auth_bp.route("/users", methods=["GET"])
-    @jwt_required()
-    def list_users():
-        users = User.query.all()
-        return jsonify([
-            {"id": u.id, "username": u.username, "email": u.email}
-            for u in users
-        ])
+# Debug helper: list all users (secured)
+@auth_bp.route("/users", methods=["GET"])
+@jwt_required()
+def list_users():
+    users = User.query.all()
+    return jsonify([
+        {"id": u.id, "username": u.username, "email": u.email}
+        for u in users
+    ])
 
 # theory
 # 5. backend/auth/routes.py

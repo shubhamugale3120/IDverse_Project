@@ -169,31 +169,39 @@ class Ed25519SigningService(SigningServiceInterface):
         
         return private_key_hex, public_key_hex
     
-    def sign_data(self, data: Dict[str, Any], private_key: str) -> Dict[str, Any]:
+    def sign_data(self, data: Dict[str, Any], private_key: Any) -> Dict[str, Any]:
         """
-        Sign data using Ed25519
-        Returns signature information in W3C VC format
+        Sign data using Ed25519. Accepts either:
+        - hex string private key (32-byte seed as hex), or
+        - an Ed25519PrivateKey object, or
+        - None (uses self.private_key loaded in __init__).
+        Returns signature information in W3C VC format.
         """
         try:
-            # Convert hex string back to private key object
-            private_key_bytes = bytes.fromhex(private_key)
-            private_key_obj = self.ed25519.Ed25519PrivateKey.from_private_bytes(private_key_bytes)
-            
+            # Normalize key input
+            if private_key is None:
+                private_key_obj = self.private_key
+            elif isinstance(private_key, str):
+                private_key_bytes = bytes.fromhex(private_key)
+                private_key_obj = self.ed25519.Ed25519PrivateKey.from_private_bytes(private_key_bytes)
+            else:
+                # Assume already an Ed25519PrivateKey
+                private_key_obj = private_key
+
             # Create data to sign (canonical JSON)
             json_str = json.dumps(data, sort_keys=True, separators=(',', ':'))
             data_bytes = json_str.encode('utf-8')
-            
+
             # Sign the data
             signature_bytes = private_key_obj.sign(data_bytes)
             signature_hex = signature_bytes.hex()
-            
-            # Create signature object in W3C VC format
+
             return {
                 "type": "Ed25519Signature2020",
                 "created": datetime.utcnow().isoformat() + "Z",
                 "verificationMethod": f"{self.issuer_did}#key-1",
                 "proofPurpose": "assertionMethod",
-                "jws": f"v={signature_hex}"  # Simplified JWS format
+                "jws": f"v={signature_hex}"
             }
         except Exception as e:
             raise RuntimeError(f"Failed to sign data: {e}")

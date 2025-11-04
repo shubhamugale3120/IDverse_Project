@@ -9,8 +9,13 @@ import json
 import base64
 import io
 from datetime import datetime
+import secrets
 
 qr_bp = Blueprint("qr", __name__, url_prefix="/qr")
+
+# in-memory short-link store for demo (token -> template)
+_PRESENT_TOKENS = {}
+_PRESENT_TTL_SECONDS = 10 * 60
 
 @qr_bp.post("/generate")
 @jwt_required()
@@ -148,3 +153,45 @@ def get_smartcard_data():
         
     except Exception as e:
         return jsonify({"error": f"Failed to get smart card data: {str(e)}"}), 500
+
+
+@qr_bp.post("/present-token")
+@jwt_required()
+def create_present_token():
+    """Create a short-lived token that encodes a verifier presentation template.
+    Body: { "vc_id": "...", "disclosed": { ... } }
+    Returns: { token, url }
+    """
+    try:
+        data = request.get_json(silent=True) or {}
+        vc_id = (data.get("vc_id") or "").strip()
+        disclosed = data.get("disclosed") or {}
+        if not vc_id:
+            return jsonify({"error": "vc_id is required"}), 400
+        token = secrets.token_urlsafe(16)
+        _PRESENT_TOKENS[token] = {
+            "vc_id": vc_id,
+            "disclosed": disclosed,
+            "expires_at": (datetime.utcnow().timestamp() + _PRESENT_TTL_SECONDS)
+        }
+        # Frontend verifier can accept query params to prefill
+        url = f"/p/{token}"
+        return jsonify({"token": token, "url": url, "ttl_seconds": _PRESENT_TTL_SECONDS}), 200
+    except Exception as e:
+        return jsonify({"error": f"Failed to create present token: {e}"}), 500
+
+
+@qr_bp.get("/present-token/<token>")
+def get_present_template(token):
+    """Resolve a present token to a presentation template. Public endpoint for demo.
+    Returns: { vc_id, disclosed }
+    """
+    try:
+        entry = _PRESENT_TOKENS.get(token)
+        if not entry:
+            return jsonify({"error": "token not found"}), 404
+        if entry.get("expires_at") and entry["expires_at"] < datetime.utcnow().timestamp():
+            return jsonify({"error": "token expired"}), 410
+        return jsonify({"vc_id": entry.get("vc_id"), "disclosed": entry.get("disclosed")}), 200
+    except Exception as e:
+        return jsonify({"error": f"Failed to resolve token: {e}"}), 500

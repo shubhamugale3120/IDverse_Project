@@ -304,8 +304,14 @@ class RealRegistryService(RegistryServiceInterface):
                 'nonce': self.w3.eth.get_transaction_count(self.account.address)
             })
 
+            # Check balance before sending
+            balance = self.w3.eth.get_balance(self.account.address)
+            gas_needed = tx.get('gas', 300000) * tx.get('gasPrice', self.w3.eth.gas_price)
+            if balance < gas_needed:
+                raise RuntimeError(f"Insufficient balance: account {self.account.address} has {balance} wei, need ~{gas_needed} wei. Use one of the funded accounts from 'npx hardhat node' output.")
+
             signed_txn = self.w3.eth.account.sign_transaction(tx, self.private_key)
-            tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+            tx_hash = self.w3.eth.send_raw_transaction(signed_txn.raw_transaction)
             receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
             if receipt.status != 1:
                 raise RuntimeError('Transaction failed')
@@ -345,7 +351,9 @@ class RealRegistryService(RegistryServiceInterface):
             
             # Sign and send transaction
             signed_txn = self.w3.eth.account.sign_transaction(transaction, self.private_key)
-            tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+            tx_hash = self.w3.eth.send_raw_transaction(signed_txn.raw_transaction)
+            signed_txn = self.w3.eth.account.sign_transaction(transaction, self.private_key)
+            tx_hash = self.w3.eth.send_raw_transaction(signed_txn.raw_transaction)
             
             # Wait for transaction receipt
             receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
@@ -382,6 +390,13 @@ class RealRegistryService(RegistryServiceInterface):
                 "expires_at": datetime.fromtimestamp(expires_at).isoformat() if expires_at else None,
                 "cid_hash": cid_hash_b32.hex()
             }
+        except Exception as e:
+            return {
+                "vc_id": vc_id,
+                "is_registered": False,
+                "is_revoked": False,
+                "error": str(e)
+            }
 
     def get_status_by_onchain_id(self, onchain_id: int) -> Dict[str, Any]:
         try:
@@ -413,20 +428,13 @@ class RealRegistryService(RegistryServiceInterface):
                 'nonce': self.w3.eth.get_transaction_count(self.account.address)
             })
             signed_txn = self.w3.eth.account.sign_transaction(tx, self.private_key)
-            tx_hash = self.w3.eth.send_raw_transaction(signed_txn.rawTransaction)
+            tx_hash = self.w3.eth.send_raw_transaction(signed_txn.raw_transaction)
             receipt = self.w3.eth.wait_for_transaction_receipt(tx_hash)
             if receipt.status != 1:
                 raise RuntimeError('Transaction failed')
             return receipt.transactionHash.hex()
         except Exception as e:
             raise RuntimeError(f"Failed to revoke by onchain id: {e}")
-        except Exception as e:
-            return {
-                "vc_id": vc_id,
-                "is_registered": False,
-                "is_revoked": False,
-                "error": f"Failed to get status: {e}"
-            }
     
     def is_credential_registered(self, vc_id: str) -> bool:
         """Check if credential is registered on blockchain"""

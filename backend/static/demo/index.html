@@ -1,0 +1,119 @@
+<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8" />
+  <title>IDVerse Demo</title>
+  <meta name="viewport" content="width=device-width,initial-scale=1" />
+  <style>
+    body{font-family:Helvetica,Arial;background:#071026;color:#d9efff;margin:0;padding:20px}
+    .card{background:#0b2440;padding:18px;border-radius:8px;margin-bottom:12px}
+    .row{display:flex;gap:12px}
+    button{background:#2fe4c5;border:none;padding:8px 14px;border-radius:6px;cursor:pointer}
+    input,textarea{width:100%;padding:8px;border-radius:6px;border:1px solid #123}
+    table{width:100%;border-collapse:collapse}
+    th,td{padding:8px;border-bottom:1px solid #123;text-align:left}
+  </style>
+</head>
+<body>
+  <h1>IDVerse — Demo</h1>
+  <div class="card">
+    <h3>Issuer</h3>
+    <div id="issuer">Loading...</div>
+  </div>
+
+  <div class="card">
+    <h3>Upload Document (demo, no auth)</h3>
+    <form id="uploadForm">
+      <input type="file" id="fileInput" />
+      <div style="height:8px"></div>
+      <button type="submit">Upload to IPFS (mock)</button>
+    </form>
+    <div id="uploadResult"></div>
+  </div>
+
+  <div class="card">
+    <h3>Issue Credential (demo)</h3>
+    <div style="margin-bottom:8px">Type: <input id="vcType" value="DemoVC"/></div>
+    <div style="margin-bottom:8px">Subject id: <input id="vcSubject" value="demo-subject"/></div>
+    <div style="margin-bottom:8px">Claims (JSON):</div>
+    <textarea id="vcClaims" rows="4">{"name":"Demo User","score":0.9}</textarea>
+    <div style="height:8px"></div>
+    <button id="issueBtn">Issue Credential</button>
+    <div id="issueResult"></div>
+  </div>
+
+  <div class="card">
+    <h3>Issued Credentials</h3>
+    <button id="refreshBtn">Refresh</button>
+    <div id="vcs">Loading...</div>
+  </div>
+
+<script>
+async function refresh() {
+  try {
+    const r = await fetch('/vc/demo-state');
+    const j = await r.json();
+    document.getElementById('issuer').textContent = j.issuer + '\nPublic key: ' + (j.public_key||'n/a');
+    const vcs = j.vcs || [];
+    const el = document.getElementById('vcs');
+    if(vcs.length===0){ el.innerHTML='<div>No VCs yet</div>'; return }
+    let html = '<table><thead><tr><th>vc_id</th><th>cid</th><th>holder</th><th>onchain</th><th>actions</th></tr></thead><tbody>'
+    for(const v of vcs){
+      const status = v.onchain_status || {};
+      const vcid = v.vc_id||'';
+      html += `<tr><td>${vcid}</td><td>${v.ipfs_cid||''}</td><td>${v.holder_id||''}</td><td>registered:${status.is_registered||false} revoked:${status.is_revoked||false} tx:${status.tx_hash||status.revocation_tx_hash||''}</td><td><button onclick="verifyVC('${vcid}')">Verify</button> <button onclick="revokeVC('${vcid}')">Revoke</button></td></tr>`
+    }
+    html += '</tbody></table>'
+    el.innerHTML = html;
+  } catch(err){ document.getElementById('vcs').textContent = 'Failed: '+err }
+}
+
+document.getElementById('refreshBtn').addEventListener('click', refresh);
+window.addEventListener('load', refresh);
+
+// Upload form
+const uploadForm = document.getElementById('uploadForm');
+uploadForm.addEventListener('submit', async (ev)=>{
+  ev.preventDefault();
+  const file = document.getElementById('fileInput').files[0];
+  if(!file){ alert('Pick a file'); return }
+  const fd = new FormData(); fd.append('file', file);
+  const res = await fetch('/vc/demo-upload', { method:'POST', body: fd });
+  const j = await res.json();
+  if(res.status===201){ document.getElementById('uploadResult').textContent = 'CID: '+j.cid } else { document.getElementById('uploadResult').textContent = 'Error: '+JSON.stringify(j) }
+});
+
+// Issue VC
+document.getElementById('issueBtn').addEventListener('click', async ()=>{
+  const type = document.getElementById('vcType').value;
+  const subject = document.getElementById('vcSubject').value;
+  let claims = {};
+  try{ claims = JSON.parse(document.getElementById('vcClaims').value) } catch(e){ alert('Invalid JSON for claims'); return }
+  const body = { type, subject_id: subject, claims };
+  const res = await fetch('/vc/demo-issue', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(body) });
+  const j = await res.json();
+  if(res.status===201){ 
+    let msg = 'Issued: '+j.vc_id+' CID:'+j.cid;
+    if(j.signing_error) msg += ' (signing_error: '+j.signing_error+')';
+    if(j.registry_error) msg += ' (registry_error: '+j.registry_error+')';
+    document.getElementById('issueResult').textContent = msg; refresh()
+  } else { document.getElementById('issueResult').textContent = 'Error: '+JSON.stringify(j) }
+});
+
+async function verifyVC(vc_id){
+  if(!vc_id){ alert('no vc_id'); return }
+  const res = await fetch('/vc/demo-verify', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({vc_id}) });
+  const j = await res.json();
+  alert('Verify result: '+JSON.stringify(j));
+}
+
+async function revokeVC(vc_id){
+  if(!vc_id){ alert('no vc_id'); return }
+  if(!confirm('Revoke '+vc_id+' ?')) return;
+  const res = await fetch('/vc/demo-revoke', { method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify({vc_id}) });
+  const j = await res.json();
+  if(res.status===200){ alert('Revoked: '+JSON.stringify(j)); refresh() } else { alert('Revoke failed: '+JSON.stringify(j)) }
+}
+</script>
+</body>
+</html>

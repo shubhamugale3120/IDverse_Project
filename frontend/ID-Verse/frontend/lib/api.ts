@@ -109,6 +109,37 @@ export const vcAPI = {
     const response = await api.get('/vc/issuer-info');
     return response.data;
   },
+  // Demo helpers (unauthenticated demo endpoints)
+  demo: {
+    upload: async (file?: File, jsonBody?: any) => {
+      if (file) {
+        const formData = new FormData();
+        formData.append('file', file);
+        const response = await api.post('/vc/demo-upload', formData, {
+          headers: { 'Content-Type': 'multipart/form-data' }
+        });
+        return response.data;
+      }
+      const response = await api.post('/vc/demo-upload', jsonBody || {});
+      return response.data;
+    },
+    issue: async (body: { type?: string; subject_id?: string; claims?: any }) => {
+      const response = await api.post('/vc/demo-issue', body);
+      return response.data;
+    },
+    verify: async (body: { vc?: any; cid?: string; vc_id?: string }) => {
+      const response = await api.post('/vc/demo-verify', body);
+      return response.data;
+    },
+    revoke: async (vc_id: string) => {
+      const response = await api.post('/vc/demo-revoke', { vc_id });
+      return response.data;
+    },
+    state: async () => {
+      const response = await api.get('/vc/demo-state');
+      return response.data;
+    }
+  },
 };
 
 export const benefitsAPI = {

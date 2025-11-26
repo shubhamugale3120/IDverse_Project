@@ -126,18 +126,60 @@ class Ed25519SigningService(SigningServiceInterface):
         # Load or generate key pair (env override if provided)
         env_priv = os.getenv("ISSUER_PRIVATE_KEY_HEX")
         env_pub = os.getenv("ISSUER_PUBLIC_KEY_HEX")
+        self._keys_path = os.path.join(os.path.dirname(__file__), '..', '..', 'instance', 'issuer_keys.json')
+
         if env_priv and env_pub:
+            # Env-specifed hex keys take precedence
             self.private_key, self.public_key = self._load_keys_from_env(env_priv, env_pub)
         else:
-            self.private_key, self.public_key = self._load_or_generate_keys()
+            # Try to load persisted keys from disk; if not present, generate and persist
+            try:
+                if os.path.exists(self._keys_path):
+                    with open(self._keys_path, 'r', encoding='utf-8') as fh:
+                        k = json.load(fh)
+                        priv_hex = k.get('private_key')
+                        pub_hex = k.get('public_key')
+                        if priv_hex and pub_hex:
+                            self.private_key, self.public_key = self._load_keys_from_env(priv_hex, pub_hex)
+                        else:
+                            self.private_key, self.public_key = self._load_or_generate_keys(persist=True)
+                else:
+                    self.private_key, self.public_key = self._load_or_generate_keys(persist=True)
+            except Exception:
+                # Fallback to in-memory generation
+                self.private_key, self.public_key = self._load_or_generate_keys(persist=False)
     
     def _load_or_generate_keys(self) -> Tuple[bytes, bytes]:
         """Load existing keys or generate new ones"""
         # In production, keys should be loaded from secure storage
-        # For now, we'll generate new keys each time
+        # For now, we'll generate new keys and optionally persist them
         private_key = self.ed25519.Ed25519PrivateKey.generate()
         public_key = private_key.public_key()
-        
+
+        return private_key, public_key
+
+    def _load_or_generate_keys(self, persist: bool = False) -> Tuple[bytes, bytes]:
+        """Generate keys and persist them to disk if requested"""
+        private_key = self.ed25519.Ed25519PrivateKey.generate()
+        public_key = private_key.public_key()
+
+        if persist:
+            try:
+                priv_hex = private_key.private_bytes(
+                    encoding=self.serialization.Encoding.Raw,
+                    format=self.serialization.PrivateFormat.Raw,
+                    encryption_algorithm=self.serialization.NoEncryption()
+                ).hex()
+                pub_hex = public_key.public_bytes(
+                    encoding=self.serialization.Encoding.Raw,
+                    format=self.serialization.PublicFormat.Raw
+                ).hex()
+                os.makedirs(os.path.dirname(self._keys_path), exist_ok=True)
+                with open(self._keys_path, 'w', encoding='utf-8') as fh:
+                    json.dump({'private_key': priv_hex, 'public_key': pub_hex}, fh)
+            except Exception:
+                print('Warning: failed to persist issuer keys')
+
         return private_key, public_key
 
     def _load_keys_from_env(self, priv_hex: str, pub_hex: str) -> Tuple[bytes, bytes]:
@@ -254,12 +296,20 @@ def get_signing_service() -> SigningServiceInterface:
     """
     sign_mode = os.getenv('SIGN_MODE', 'mock').lower()
     issuer_did = os.getenv('ISSUER_DID', 'did:example:issuer')
-    
-    if sign_mode == 'ed25519':
-        return Ed25519SigningService(issuer_did)
-    else:
-        # Default to mock for development
-        return MockSigningService()
+
+    # Use a module-level singleton so the same signing service (and keypair)
+    # is reused across the app lifetime. This prevents signatures being created
+    # with one ephemeral key instance and verified with another.
+    global _SIGNING_SERVICE_INSTANCE
+    try:
+        _SIGNING_SERVICE_INSTANCE
+    except NameError:
+        if sign_mode == 'ed25519':
+            _SIGNING_SERVICE_INSTANCE = Ed25519SigningService(issuer_did)
+        else:
+            _SIGNING_SERVICE_INSTANCE = MockSigningService()
+
+    return _SIGNING_SERVICE_INSTANCE
 
 
 # Example usage and testing

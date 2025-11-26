@@ -129,3 +129,12 @@ def get_document_types():
         
     except Exception as e:
         return jsonify({"error": f"Failed to retrieve document types: {str(e)}"}), 500
+
+
+@documents_bp.get('/demo-list')
+def demo_list_documents():
+    """Unauthenticated demo listing of uploaded documents (reads in-memory demo store)."""
+    try:
+        return jsonify({"documents": list(_documents.values()), "total": len(_documents)}), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500

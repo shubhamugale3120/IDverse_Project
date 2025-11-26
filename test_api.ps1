@@ -1,5 +1,6 @@
 # IDVerse API Testing Script
 # This script demonstrates how to test all endpoints with detailed explanations
+# http://127.0.0.1:5000/static/demo/index.html
 
 Write-Host "🚀 IDVerse API Testing Script" -ForegroundColor Green
 Write-Host "=================================" -ForegroundColor Green

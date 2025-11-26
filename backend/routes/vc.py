@@ -234,13 +234,41 @@ def present_vc():
         elif cid:
             canonical_vc = ipfs_service.get_json(cid)
         elif presented_vc_id:
-            # Try DB lookup to get CID/json
-            from backend.model import VerifiableCredential
-            vc_rec = VerifiableCredential.query.filter_by(vc_id=presented_vc_id).first()
-            if vc_rec and vc_rec.vc_json:
-                canonical_vc = vc_rec.vc_json
-            elif vc_rec and vc_rec.ipfs_cid:
-                canonical_vc = ipfs_service.get_json(vc_rec.ipfs_cid)
+                # Try DB lookup to get CID/json. Be tolerant of formats: accept vc ids with or without `vc-`,
+                # also accept raw IPFS CIDs and partial matches.
+                from backend.model import VerifiableCredential
+                def _resolve_vc_by_identifier(identifier):
+                    # direct match
+                    rec = VerifiableCredential.query.filter_by(vc_id=identifier).first()
+                    if rec:
+                        return rec
+                    # try adding/removing 'vc-' prefix
+                    if identifier.startswith('vc-'):
+                        rec = VerifiableCredential.query.filter_by(vc_id=identifier[3:]).first()
+                        if rec:
+                            return rec
+                    else:
+                        rec = VerifiableCredential.query.filter_by(vc_id='vc-' + identifier).first()
+                        if rec:
+                            return rec
+                    # try searching by ipfs_cid equals identifier
+                    rec = VerifiableCredential.query.filter_by(ipfs_cid=identifier).first()
+                    if rec:
+                        return rec
+                    # try contains (partial match) - helpful when IDs were displayed differently
+                    try:
+                        rec = VerifiableCredential.query.filter(VerifiableCredential.vc_id.contains(identifier)).first()
+                        if rec:
+                            return rec
+                    except Exception:
+                        pass
+                    return None
+
+                vc_rec = _resolve_vc_by_identifier(presented_vc_id)
+                if vc_rec and getattr(vc_rec, 'vc_json', None):
+                    canonical_vc = vc_rec.vc_json
+                elif vc_rec and getattr(vc_rec, 'ipfs_cid', None):
+                    canonical_vc = ipfs_service.get_json(vc_rec.ipfs_cid)
         if not canonical_vc:
             return jsonify({"verified": False, "reason": "VC not found"}), 200
 
@@ -255,7 +283,6 @@ def present_vc():
         # Expiry check
         exp = unsigned.get("expirationDate")
         if exp:
-            from datetime import datetime
             try:
                 if datetime.fromisoformat(exp.replace("Z", "")) < datetime.utcnow():
                     return jsonify({"verified": False, "reason": "Credential expired"}), 200
@@ -345,7 +372,6 @@ def revoke_vc():
         from backend.model import VerifiableCredential
         vc_rec = VerifiableCredential.query.filter_by(vc_id=vc_id).first()
         if vc_rec:
-            from datetime import datetime
             vc_rec.is_revoked = True
             vc_rec.revoked_at = datetime.utcnow()
             vc_rec.revoked_by = user_email
@@ -386,9 +412,308 @@ def issuer_info():
         return jsonify({"error": str(e)}), 500
 
 
+@vc_bp.get('/mock-registry')
+def mock_registry():
+    """Debug endpoint: return mock registry state when running in mock mode.
+    This is intended for local demo debugging only - it should not be enabled in production.
+    """
+    try:
+        if os.getenv('CHAIN_MODE', 'mock').lower() != 'mock':
+            return jsonify({'error': 'mock registry only available when CHAIN_MODE=mock'}), 403
+
+        registry_service = get_registry_service()
+        # Try to return internal structures if available
+        registry = getattr(registry_service, '_registry', None)
+        vcid_map = getattr(registry_service, '_vcid_map', None)
+        tx_counter = getattr(registry_service, '_transaction_counter', None)
+        return jsonify({'registry': registry or {}, 'vcid_map': vcid_map or {}, 'transaction_counter': tx_counter or 0}), 200
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
 @vc_bp.get("/status/<vc_id>")
 def vc_status(vc_id):
     """Return stub status for a VC id."""
     return jsonify({"vc_id": vc_id, "status": "issued", "revoked": False}), 200
+
+
+@vc_bp.get("/demo-state")
+def demo_state():
+    """Return a small snapshot useful for the demo UI: issuer info, known VCs from DB and on-chain status."""
+    try:
+        signing_service = get_signing_service()
+        registry_service = get_registry_service()
+
+        # Pull VCs from DB (if any)
+        from backend.model import VerifiableCredential
+        vcs = []
+        for rec in VerifiableCredential.query.limit(100).all():
+            vc_id = getattr(rec, 'vc_id', None)
+            ipfs_cid = getattr(rec, 'ipfs_cid', None)
+            # query registry status (mock or real)
+            try:
+                status = registry_service.get_credential_status(vc_id) if vc_id else {"is_registered": False}
+            except Exception:
+                status = {"is_registered": False}
+
+            vcs.append({
+                "vc_id": vc_id,
+                "holder_id": getattr(rec, 'holder_id', None),
+                "ipfs_cid": ipfs_cid,
+                "onchain_status": status,
+            })
+
+        return jsonify({
+            "issuer": signing_service.get_issuer_did(),
+            "public_key": signing_service.get_public_key(),
+            "vcs": vcs
+        }), 200
+    except Exception as e:
+        return jsonify({"error": str(e)}), 500
+
+
+@vc_bp.post('/demo-upload')
+def demo_upload():
+    """Unauthenticated demo file upload. Returns a CID using the configured IPFS service."""
+    try:
+        # prefer multipart file
+        if 'file' in request.files:
+            f = request.files['file']
+            content = f.read()
+            file_type = f.content_type or 'application/octet-stream'
+            filename = f.filename or 'upload.bin'
+            data = {
+                'filename': filename,
+                'content_type': file_type,
+                'content': content.decode('utf-8', errors='ignore')[:100000],
+            }
+            ipfs_service = get_ipfs_service()
+            cid = ipfs_service.upload_json(data)
+            return jsonify({'cid': cid}), 201
+
+        # else expect JSON body
+        body = request.get_json(silent=True) or {}
+        if not body:
+            return jsonify({'error': 'no file or json provided'}), 400
+        ipfs_service = get_ipfs_service()
+        cid = ipfs_service.upload_json(body)
+        return jsonify({'cid': cid}), 201
+    except Exception as e:
+        return jsonify({'error': str(e)}), 500
+
+
+@vc_bp.post('/demo-issue')
+def demo_issue():
+    """Issue a credential in demo mode without auth. Creates/demo user if needed and returns the issued VC info."""
+    try:
+        body = request.get_json(silent=True) or {}
+        credential_type = (body.get('type') or 'DemoVC')
+        subject = body.get('subject_id') or 'demo-subject'
+        claims = body.get('claims') or {}
+
+        signing_service = get_signing_service()
+        ipfs_service = get_ipfs_service()
+        registry_service = get_registry_service()
+
+        # Ensure demo user exists
+        demo_email = os.getenv('DEMO_USER_EMAIL', 'demo@idverse.local')
+        demo_username = os.getenv('DEMO_USER_NAME', 'demo_user')
+        from backend.model import User, VerifiableCredential
+        user = User.query.filter_by(email=demo_email).first()
+        if not user:
+            user = User(username=demo_username, email=demo_email)
+            user.set_password('demo123')
+            from backend.extensions import db
+            db.session.add(user)
+            db.session.commit()
+
+        # build VC
+        vc_id = f"vc-{credential_type}-{uuid.uuid4().hex[:8]}"
+        vc_data = {
+            "@context": ["https://www.w3.org/2018/credentials/v1"],
+            "type": ["VerifiableCredential", credential_type],
+            "issuer": signing_service.get_issuer_did(),
+            "id": vc_id,
+            "credentialSubject": {"id": f"did:example:{subject}", **claims},
+            "issuanceDate": datetime.utcnow().isoformat() + "Z",
+        }
+
+        # sign
+        signing_error = None
+        try:
+            signature = signing_service.sign_data(vc_data, getattr(signing_service, 'private_key', None))
+            vc_data['proof'] = signature
+        except Exception as e:
+            # record signing error and fallback to mock sign
+            signing_error = str(e)
+            vc_data['proof'] = {
+                'type': 'MockProof', 'created': datetime.utcnow().isoformat() + 'Z',
+                'verificationMethod': signing_service.get_issuer_did() + '#key-1',
+                'jws': 'mocksig'
+            }
+
+        # upload
+        cid = ipfs_service.upload_json(vc_data)
+        try:
+            ipfs_service.pin_cid(cid)
+        except Exception:
+            pass
+
+        # register on chain (mock or real)
+        registry_error = None
+        try:
+            tx_hash = registry_service.register_credential(vc_id, cid, signing_service.get_issuer_did())
+            onchain_id = registry_service.get_onchain_id(vc_id) if hasattr(registry_service, 'get_onchain_id') else None
+        except Exception as e:
+            registry_error = str(e)
+            tx_hash = None
+            onchain_id = None
+
+        # persist VC record
+        from backend.extensions import db
+        vc_record = VerifiableCredential(
+            vc_id=vc_id,
+            credential_type=credential_type,
+            holder_id=user.id,
+            vc_json=vc_data,
+            claims=claims,
+            ipfs_cid=cid,
+            blockchain_tx_hash=tx_hash,
+            registry_address=os.getenv('REGISTRY_CONTRACT_ADDRESS', 'mock'),
+            onchain_vc_id=onchain_id
+        )
+        db.session.add(vc_record)
+        db.session.commit()
+
+        resp = {"vc_id": vc_id, "cid": cid, "tx_hash": tx_hash, "vc": vc_data}
+        if signing_error:
+            resp['signing_error'] = signing_error
+        if registry_error:
+            resp['registry_error'] = registry_error
+        return jsonify(resp), 201
+    except Exception as e:
+        try:
+            from backend.extensions import db
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({"error": str(e)}), 500
+
+
+@vc_bp.post('/demo-verify')
+def demo_verify():
+    """Unauthenticated demo verify endpoint. Accepts vc (json) or cid or vc_id and returns verification result."""
+    try:
+        body = request.get_json(silent=True) or {}
+        provided_vc = body.get('vc')
+        cid = body.get('cid')
+        presented_vc_id = body.get('vc_id')
+
+        signing_service = get_signing_service()
+        registry_service = get_registry_service()
+        ipfs_service = get_ipfs_service()
+
+        canonical_vc = None
+        if provided_vc:
+            canonical_vc = provided_vc
+        elif cid:
+            canonical_vc = ipfs_service.get_json(cid)
+        elif presented_vc_id:
+            # Use same tolerant resolution as present_vc: accept vc- prefix variations and CID lookups
+            def _resolve_vc_by_identifier(identifier):
+                rec = VerifiableCredential.query.filter_by(vc_id=identifier).first()
+                if rec:
+                    return rec
+                if identifier.startswith('vc-'):
+                    rec = VerifiableCredential.query.filter_by(vc_id=identifier[3:]).first()
+                    if rec:
+                        return rec
+                else:
+                    rec = VerifiableCredential.query.filter_by(vc_id='vc-' + identifier).first()
+                    if rec:
+                        return rec
+                rec = VerifiableCredential.query.filter_by(ipfs_cid=identifier).first()
+                if rec:
+                    return rec
+                try:
+                    rec = VerifiableCredential.query.filter(VerifiableCredential.vc_id.contains(identifier)).first()
+                    if rec:
+                        return rec
+                except Exception:
+                    pass
+                return None
+
+            vc_rec = _resolve_vc_by_identifier(presented_vc_id)
+            if vc_rec and getattr(vc_rec, 'vc_json', None):
+                canonical_vc = vc_rec.vc_json
+            elif vc_rec and getattr(vc_rec, 'ipfs_cid', None):
+                canonical_vc = ipfs_service.get_json(vc_rec.ipfs_cid)
+
+        if not canonical_vc:
+            return jsonify({'verified': False, 'reason': 'VC not found'}), 200
+
+        proof = canonical_vc.get('proof') or {}
+        unsigned = {k: v for k, v in canonical_vc.items() if k != 'proof'}
+
+        # signature check
+        pubkey = signing_service.get_public_key()
+        sig_ok = signing_service.verify_signature(unsigned, proof, pubkey)
+
+        # on-chain status
+        vc_id = unsigned.get('id') or presented_vc_id or ''
+        try:
+            status = registry_service.get_credential_status(vc_id) if vc_id else {'is_registered': False}
+        except Exception:
+            status = {'is_registered': False}
+
+        active_ok = status.get('is_registered', False) and not status.get('is_revoked', False)
+
+        verified = bool(sig_ok and active_ok)
+        return jsonify({'verified': verified, 'checks': {'signature': sig_ok, 'onchain': active_ok}, 'status': status}), 200
+    except Exception as e:
+        return jsonify({'verified': False, 'error': str(e)}), 500
+
+
+@vc_bp.post('/demo-revoke')
+def demo_revoke():
+    """Unauthenticated demo revoke: revoke vc_id on registry and mark DB record revoked."""
+    try:
+        body = request.get_json(silent=True) or {}
+        vc_id = (body.get('vc_id') or '').strip()
+        if not vc_id:
+            return jsonify({'error': 'vc_id required'}), 400
+
+        registry_service = get_registry_service()
+        # try revoke
+        try:
+            tx = registry_service.revoke_credential(vc_id, 'demo_revoke')
+        except Exception:
+            # if registry supports revoke_by_onchain_id
+            try:
+                vc_rec = VerifiableCredential.query.filter_by(vc_id=vc_id).first()
+                if vc_rec and vc_rec.onchain_vc_id is not None:
+                    tx = registry_service.revoke_by_onchain_id(int(vc_rec.onchain_vc_id), 1)
+                else:
+                    raise
+            except Exception as e:
+                return jsonify({'error': f'revoke failed: {e}'}), 500
+
+        # update DB
+        vc_rec2 = VerifiableCredential.query.filter_by(vc_id=vc_id).first()
+        if vc_rec2:
+            vc_rec2.is_revoked = True
+            vc_rec2.revoked_at = datetime.utcnow()
+            vc_rec2.revoked_by = 'demo'
+            vc_rec2.revocation_reason = 'demo_revoke'
+            vc_rec2.blockchain_tx_hash = tx or vc_rec2.blockchain_tx_hash
+            db.session.commit()
+
+        return jsonify({'vc_id': vc_id, 'tx_hash': tx}), 200
+    except Exception as e:
+        try:
+            db.session.rollback()
+        except Exception:
+            pass
+        return jsonify({'error': str(e)}), 500
 
 

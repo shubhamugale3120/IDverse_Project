@@ -248,7 +248,13 @@ def get_ipfs_service() -> IPFSServiceInterface:
             pass
         return MockIPFSService()
     else:
-        return MockIPFSService()
+        # Return a singleton mock IPFS service so uploaded CIDs persist across requests
+        global _MOCK_IPFS_INSTANCE
+        try:
+            _MOCK_IPFS_INSTANCE
+        except NameError:
+            _MOCK_IPFS_INSTANCE = MockIPFSService()
+        return _MOCK_IPFS_INSTANCE
 
 
 # Example usage and testing

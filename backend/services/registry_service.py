@@ -56,11 +56,24 @@ class MockRegistryService(RegistryServiceInterface):
     
     def __init__(self):
         # Mock registry storage
+        # Try to load persisted registry state so demo data survives restarts
+        self._storage_path = os.path.join(os.path.dirname(__file__), '..', '..', 'instance', 'mock_registry.json')
         self._registry: Dict[str, Dict[str, Any]] = {}
         self._revoked_credentials: set = set()
         self._transaction_counter = 0
         self._vcid_map: Dict[str, int] = {}
         self._next_onchain_id = 1
+        try:
+            if os.path.exists(self._storage_path):
+                with open(self._storage_path, 'r', encoding='utf-8') as fh:
+                    data = json.load(fh)
+                    self._registry = data.get('registry', {})
+                    self._vcid_map = {k: int(v) for k, v in data.get('vcid_map', {}).items()}
+                    self._transaction_counter = int(data.get('transaction_counter', 0))
+                    self._next_onchain_id = int(data.get('next_onchain_id', self._next_onchain_id))
+        except Exception:
+            # If loading fails, keep in-memory empty but don't crash the service
+            print('Warning: failed to load mock registry persistence; starting fresh')
     
     def register_credential(self, vc_id: str, cid: str, issuer_did: str) -> str:
         """
@@ -86,7 +99,19 @@ class MockRegistryService(RegistryServiceInterface):
         # Assign a mock on-chain id
         self._vcid_map[vc_id] = self._next_onchain_id
         self._next_onchain_id += 1
-        
+        # Persist state
+        try:
+            os.makedirs(os.path.dirname(self._storage_path), exist_ok=True)
+            with open(self._storage_path, 'w', encoding='utf-8') as fh:
+                json.dump({
+                    'registry': self._registry,
+                    'vcid_map': self._vcid_map,
+                    'transaction_counter': self._transaction_counter,
+                    'next_onchain_id': self._next_onchain_id
+                }, fh, indent=2)
+        except Exception:
+            print('Warning: failed to persist mock registry state')
+
         return tx_hash
     
     def revoke_credential(self, vc_id: str, reason: str = None) -> str:
@@ -110,7 +135,19 @@ class MockRegistryService(RegistryServiceInterface):
         
         # Add to revoked set
         self._revoked_credentials.add(vc_id)
-        
+        # Persist state after revocation
+        try:
+            os.makedirs(os.path.dirname(self._storage_path), exist_ok=True)
+            with open(self._storage_path, 'w', encoding='utf-8') as fh:
+                json.dump({
+                    'registry': self._registry,
+                    'vcid_map': self._vcid_map,
+                    'transaction_counter': self._transaction_counter,
+                    'next_onchain_id': self._next_onchain_id
+                }, fh, indent=2)
+        except Exception:
+            print('Warning: failed to persist mock registry state after revoke')
+
         return tx_hash
     
     def get_credential_status(self, vc_id: str) -> Dict[str, Any]:
@@ -461,7 +498,13 @@ def get_registry_service() -> RegistryServiceInterface:
         return RealRegistryService(rpc_url, contract_address, private_key)
     else:
         # Default to mock for development
-        return MockRegistryService()
+        # Use a module-level singleton so mock registry state persists across calls
+        global _MOCK_REGISTRY_INSTANCE
+        try:
+            _MOCK_REGISTRY_INSTANCE
+        except NameError:
+            _MOCK_REGISTRY_INSTANCE = MockRegistryService()
+        return _MOCK_REGISTRY_INSTANCE
 
 
 # Example usage and testing
